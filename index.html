@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>AnonBoard</title>
+  <title>Threadless</title>
   <style>
     :root { --bg:#0b0f14; --card:#121923; --muted:#8aa0b8; --ink:#e8eef6; --accent:#4aa8ff; }
     *{box-sizing:border-box}
@@ -34,8 +34,8 @@
     <div class="wrap">
       <div class="topbar">
         <div>
-          <h1>AnonBoard</h1>
-          <div class="sub">A single, continuously updating text board. No accounts, no likes—just posts.</div>
+          <h1>Threadless</h1>
+          <div class="sub">A single, continuously updating anonymous text board.</div>
         </div>
         <div class="pill" id="status">connecting…</div>
       </div>
@@ -55,32 +55,31 @@
     <section class="feed" id="feed"></section>
 
     <div class="footer">
-      <strong>Tips</strong>: Shift+Enter inserts a newline. Page live-updates. Content is immutable.<br/>
-      Roadmap: per-board filters, images, moderation panel, server-side rate limits.
+      Tips: Shift+Enter inserts a newline. Page live-updates. Content is immutable.
     </div>
   </main>
 
-  <!-- Firebase SDKs -->
+  <!-- Firebase SDKs (compat builds for simple script-tag use) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
-    // 1) Initialize Firebase
+    // === 1) Your Firebase config (from your screenshots) ===
     const firebaseConfig = {
-      // TODO: paste your Firebase config here:
-      // apiKey: "…",
-      // authDomain: "…",
-      // projectId: "…",
-      // storageBucket: "…",
-      // messagingSenderId: "…",
-      // appId: "…"
+      apiKey: "AIzaSyBzaVMbY4wcecKnJLU0g-ehxlNskTgRCSQ",
+      authDomain: "threadless-6d6f5.firebaseapp.com",
+      projectId: "threadless-6d6f5",
+      storageBucket: "threadless-6d6f5.firebasestorage.app",
+      messagingSenderId: "356438880265",
+      appId: "1:356438880265:web:f891f23111a73a2912f698",
+      measurementId: "G-6GN5MFVZV8"
     };
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db   = firebase.firestore();
 
-    // 2) State/Elems
+    // === 2) Elements & settings ===
     const feedEl   = document.getElementById('feed');
     const textEl   = document.getElementById('text');
     const postBtn  = document.getElementById('postBtn');
@@ -89,93 +88,77 @@
     const statusEl = document.getElementById('status');
 
     const MAXLEN = 1000;
-    const COOLDOWN_SEC = 15; // simple client cooldown per session
+    const COOLDOWN_SEC = 15;
 
-    // 3) Helpers
     const sleep = ms => new Promise(r=>setTimeout(r,ms));
     function nowSec(){ return Math.floor(Date.now()/1000); }
     function getCooldownLeft(){
       const last = Number(localStorage.getItem('lastPostTs') || '0');
-      const left = Math.max(0, (last + COOLDOWN_SEC) - nowSec());
-      return left;
+      return Math.max(0, (last + COOLDOWN_SEC) - nowSec());
     }
     function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
-    function sanitize(s){
-      // very basic trim; let Firestore rules enforce length
-      return s.replace(/\s+$/,'').replace(/^\s+/, '');
-    }
+    function sanitize(s){ return s.replace(/\s+$/,'').replace(/^\s+/, ''); }
     function fmtTime(ts){
       const d = ts?.toDate ? ts.toDate() : new Date();
       return d.toLocaleString();
     }
 
-    // 4) Auth anonymously
+    // === 3) Auth anonymously (with visible errors) ===
     async function ensureAnonAuth(){
-      try{
-        const user = await new Promise((resolve,reject)=>{
-          const unsub = auth.onAuthStateChanged(u=>{
-            unsub();
-            if(u) resolve(u);
-            else auth.signInAnonymously().then(({user})=>resolve(user)).catch(reject);
-          })
+      return new Promise((resolve) => {
+        const unsub = auth.onAuthStateChanged(async (u) => {
+          if (u) { statusEl.textContent = 'online'; unsub(); resolve(u); }
+          else {
+            try {
+              const { user } = await auth.signInAnonymously();
+              statusEl.textContent = 'online';
+              unsub(); resolve(user);
+            } catch (e) {
+              console.error('Auth error:', e);
+              statusEl.textContent = 'auth error';
+              resolve(null);
+            }
+          }
         });
-        statusEl.textContent = 'online';
-        return user;
-      }catch(e){
-        console.error(e);
-        statusEl.textContent = 'auth error';
-      }
-    }
-
-    // 5) Live feed (newest first)
-    function renderPost(doc){
-      const d = doc.data();
-      const li = document.createElement('div');
-      li.className = 'post';
-      li.innerHTML = `
-        <div class="content"></div>
-        <div class="time">#${doc.id.slice(0,6)} • ${fmtTime(d.createdAt)} • anon</div>
-      `;
-      li.querySelector('.content').textContent = d.content;
-      return li;
-    }
-
-    function startFeed(){
-      const q = db.collection('posts').orderBy('createdAt','desc').limit(100);
-      q.onSnapshot(snap=>{
-        // re-render simple (for 100 items it’s fine)
-        feedEl.innerHTML = '';
-        snap.docs.forEach(doc=>{
-          feedEl.appendChild(renderPost(doc));
-        });
-      }, err=>{
-        console.error(err);
-        statusEl.textContent = 'stream error';
       });
     }
 
-    // 6) Composer interactions
-    textEl.addEventListener('input', ()=>{
-      countEl.textContent = textEl.value.length;
-    });
+    // === 4) Live feed ===
+    function renderPost(doc){
+      const d = doc.data();
+      const el = document.createElement('div');
+      el.className = 'post';
+      el.innerHTML = `
+        <div class="content"></div>
+        <div class="time">#${doc.id.slice(0,6)} • ${fmtTime(d.createdAt)} • anon</div>
+      `;
+      el.querySelector('.content').textContent = d.content;
+      return el;
+    }
 
+    function startFeed(){
+      db.collection('posts').orderBy('createdAt','desc').limit(100)
+        .onSnapshot(snap=>{
+          feedEl.innerHTML = '';
+          snap.docs.forEach(doc => feedEl.appendChild(renderPost(doc)));
+        }, err=>{
+          console.error('Stream error:', err);
+          statusEl.textContent = 'stream error';
+        });
+    }
+
+    // === 5) Composer ===
+    textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
     textEl.addEventListener('keydown', (e)=>{
-      if(e.key === 'Enter' && !e.shiftKey){
-        e.preventDefault();
-        postBtn.click();
-      }
+      if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); postBtn.click(); }
     });
 
     async function post(){
       const left = getCooldownLeft();
-      if(left>0){
-        coolEl.textContent = left;
-        return;
-      }
+      if(left>0){ coolEl.textContent = left; return; }
       const content = sanitize(textEl.value);
       if(!content){ return; }
       postBtn.disabled = true;
-
       try{
         const uid = auth.currentUser?.uid || null;
         await db.collection('posts').add({
@@ -183,26 +166,22 @@
           uid,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        textEl.value=''; countEl.textContent='0';
-        setJustPosted();
+        textEl.value=''; countEl.textContent='0'; setJustPosted();
       }catch(e){
-        alert('Post failed. Try again.');
-        console.error(e);
+        alert('Post failed. Check console.');
+        console.error('Write error:', e);
       }finally{
         postBtn.disabled = false;
       }
     }
     postBtn.addEventListener('click', post);
 
-    // 7) Cooldown ticker
+    // === 6) Cooldown ticker ===
     (async function tick(){
-      while(true){
-        coolEl.textContent = getCooldownLeft();
-        await sleep(500);
-      }
+      while(true){ coolEl.textContent = getCooldownLeft(); await sleep(500); }
     })();
 
-    // 8) Boot
+    // === 7) Boot ===
     (async function main(){
       await ensureAnonAuth();
       startFeed();
