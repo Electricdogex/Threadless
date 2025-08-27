@@ -206,6 +206,8 @@
     const COOLDOWN_SEC = 15;
     const PAGE_SIZE = 30;
     let SOURCE = 'posts_public'; // will auto-fallback to 'posts' if missing
+    let HAS_FLAIR = true;        // detect if flair column exists
+    let REACTIONS_AVAILABLE = true; // detect if reactions table exists
     let nextCursor = null; // { created_at, id }
     const seen = new Set(); // post ids rendered
 
@@ -251,6 +253,7 @@
     function emojiRow(post){
       const wrap = document.createElement('div');
       wrap.className = 'actions';
+      if (!REACTIONS_AVAILABLE) { wrap.style.display = 'none'; return wrap; }
       const emojis = [
         {key:'up',    label:'🔼'},
         {key:'down',  label:'🔽'},
@@ -286,7 +289,7 @@
       head.className = 'headerline';
       const flair = document.createElement('span');
       flair.className = 'flair';
-      flair.textContent = row.flair || 'anon';
+      flair.textContent = (HAS_FLAIR && row.flair) ? row.flair : 'anon';
       const dot = document.createElement('span');
       dot.textContent = '·';
       const time = document.createElement('span');
@@ -312,10 +315,11 @@
       if (prepend) feedEl.prepend(frag); else feedEl.appendChild(frag);
     }
 
-    // --- Pagination via keyset with source fallback ---
+    // --- Pagination via keyset with source + flair fallback ---
     async function fetchPage(cursor){
+      const fields = HAS_FLAIR ? 'id, content, created_at, flair' : 'id, content, created_at';
       let q = sb.from(SOURCE)
-        .select('id, content, created_at, flair')
+        .select(fields)
         .order('created_at', { ascending:false })
         .order('id', { ascending:false })
         .limit(PAGE_SIZE);
@@ -329,13 +333,16 @@
       const { data, error, status } = await q;
 
       // Fallback if view doesn't exist (404 or relation error)
-      if (
-        (status === 404 && SOURCE === 'posts_public') ||
-        (error && (/posts_public/gi.test(error.message||'') || (error.code === '42P01')))
-      ){
+      if ((status === 404 && SOURCE === 'posts_public') ||
+          (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
         SOURCE = 'posts';
         showStatus('fallback');
         return fetchPage(cursor);
+      }
+
+      // Flair missing → retry without flair and remember
+      if (status === 400 || (error && (error.code === '42703' || /flair.*does not exist/i.test(error.message||'')))){
+        if (HAS_FLAIR){ HAS_FLAIR = false; return fetchPage(cursor); }
       }
 
       if (error){
@@ -382,16 +389,20 @@
 
     // --- Reactions: load & update counts ---
     async function hydrateReactions(postIds){
-      if (!postIds.length) return;
-      const { data, error } = await sb.from('reactions')
+      if (!REACTIONS_AVAILABLE || !postIds.length) return;
+      const { data, error, status } = await sb.from('reactions')
         .select('post_id, emoji')
         .in('post_id', postIds);
-      if (error){ console.warn('reactions fetch error', error); return; }
-      const agg = {};
-      for (const r of data){
-        const k = `${r.post_id}:${r.emoji}`;
-        agg[k] = (agg[k] || 0) + 1;
+
+      if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
+        REACTIONS_AVAILABLE = false;
+        document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
+        return;
       }
+      if (error){ console.warn('reactions fetch error', error); return; }
+
+      const agg = {};
+      for (const r of (data||[])){ const k = `${r.post_id}:${r.emoji}`; agg[k] = (agg[k]||0)+1; }
       for (const pid of postIds){
         ['up','down','like','lol','heart'].forEach(em=>{
           const el = document.getElementById(`c_${pid}_${em}`);
@@ -401,9 +412,15 @@
     }
 
     async function react(post_id, emoji, btn){
+      if (!REACTIONS_AVAILABLE) return;
       btn.disabled = true;
       try{
-        const { error } = await sb.from('reactions').insert({ post_id, session_tag: SESSION_TAG, emoji });
+        const { error, status } = await sb.from('reactions').insert({ post_id, session_tag: SESSION_TAG, emoji });
+        if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
+          REACTIONS_AVAILABLE = false;
+          document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
+          return;
+        }
         if (error){
           // duplicate or other constraint → ignore quietly
           console.warn('reaction error', error.message || error.code);
@@ -460,7 +477,6 @@
 
       if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
 
-      // Post one prompt to the table (not the view)
       const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
       await insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
       localStorage.setItem('threadless_prompt_date', today);
@@ -472,11 +488,16 @@
     postBtn.addEventListener('click', post);
 
     async function insertPost(payload){
-      let res = await sb.from('posts').insert(payload);
-      if (res.error && /flair/i.test(res.error.message||'')){
-        res = await sb.from('posts').insert({ content: payload.content });
+      if (HAS_FLAIR){
+        const r1 = await sb.from('posts').insert(payload);
+        if (!r1.error) return r1;
+        if (r1.error && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))){
+          HAS_FLAIR = false; // stop sending flair
+        } else {
+          return r1;
+        }
       }
-      return res;
+      return sb.from('posts').insert({ content: payload.content }); // retry without flair
     }
 
     async function post(){
@@ -531,13 +552,15 @@
         })
         .subscribe();
 
-      sb.channel('threadless_reacts')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
-          const { post_id, emoji } = payload.new;
-          const c = document.getElementById(`c_${post_id}_${emoji}`);
-          if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
-        })
-        .subscribe();
+      if (REACTIONS_AVAILABLE){
+        sb.channel('threadless_reacts')
+          .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
+            const { post_id, emoji } = payload.new;
+            const c = document.getElementById(`c_${post_id}_${emoji}`);
+            if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
+          })
+          .subscribe();
+      }
     }
 
     // --- Pager + scroll ---
