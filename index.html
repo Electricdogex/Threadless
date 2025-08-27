@@ -5,31 +5,35 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Threadless · ALPHA</title>
 
-<!-- Favicon (green/orange) -->
+<!-- Security: CSP + robots -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  base-uri 'none';
+  form-action 'self';
+  img-src 'self' data:;
+  style-src 'self' 'unsafe-inline';
+  script-src 'self' https://cdn.jsdelivr.net https://cdn.skypack.dev 'unsafe-inline';
+  connect-src 'self' https://*.supabase.co wss://*.supabase.co;
+  frame-ancestors 'none';
+  upgrade-insecure-requests;">
+<meta name="robots" content="noindex, nofollow">
+
+<!-- Favicon -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1613'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%23ff8b3d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
 
 <style>
   /* === Themes === */
   :root{
     --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27;
-    --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d;
-    --warn:#ffd08f; --bad:#ff8c8c;
+    --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d; --warn:#ffd08f; --bad:#ff8c8c;
   }
-  [data-theme="forest"]{
-    --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27;
-    --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d;
-    --warn:#ffd08f;
-  }
-  [data-theme="sunset"]{
-    --bg:#160f12; --card:#22161b; --ink:#ffeef3; --muted:#c5a7b3; --line:#2d1e25;
-    --accent:#ff6b6b; --accent-2:#ffb86b; --accent-2-ink:#2b130f;
-    --warn:#ffe0b5;
-  }
-  [data-theme="midnight"]{
-    --bg:#0d0f19; --card:#121427; --ink:#e9ebff; --muted:#a9b0d4; --line:#1a1d36;
-    --accent:#8ab4ff; --accent-2:#6ae6c1; --accent-2-ink:#021410;
-    --warn:#ffd9a3;
-  }
+  [data-theme="forest"]{ --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27; --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d; --warn:#ffd08f }
+  [data-theme="sunset"]{ --bg:#160f12; --card:#22161b; --ink:#ffeef3; --muted:#c5a7b3; --line:#2d1e25; --accent:#ff6b6b; --accent-2:#ffb86b; --accent-2-ink:#2b130f; --warn:#ffe0b5 }
+  [data-theme="midnight"]{ --bg:#0d0f19; --card:#121427; --ink:#e9ebff; --muted:#a9b0d4; --line:#1a1d36; --accent:#8ab4ff; --accent-2:#6ae6c1; --accent-2-ink:#021410; --warn:#ffd9a3 }
+  /* New extra themes */
+  [data-theme="ocean"]{ --bg:#07171d; --card:#0d2330; --ink:#e6fbff; --muted:#a6c9d6; --line:#143244; --accent:#26b0ff; --accent-2:#15d1b2; --accent-2-ink:#01221c; --warn:#ffe6b8 }
+  [data-theme="grape"]{ --bg:#160d1a; --card:#231128; --ink:#f6e9ff; --muted:#c7abd8; --line:#31153b; --accent:#c47dff; --accent-2:#ff9fb3; --accent-2-ink:#2b0c18; --warn:#ffe0c1 }
+  [data-theme="mono"]{ --bg:#0c0c0c; --card:#141414; --ink:#f5f5f5; --muted:#bcbcbc; --line:#202020; --accent:#ffffff; --accent-2:#d0d0d0; --accent-2-ink:#121212; --warn:#ffd08f }
 
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -43,56 +47,25 @@
     font:16px/1.5 system-ui, Segoe UI, Inter, Arial, sans-serif;
   }
 
-  header{
-    position:sticky; top:0; z-index:3;
-    background:linear-gradient(180deg, color-mix(in srgb, var(--card) 85%, transparent), transparent);
-    backdrop-filter: blur(6px);
-    border-bottom:1px solid var(--line);
-  }
-
+  header{ position:sticky; top:0; z-index:3; background:linear-gradient(180deg, color-mix(in srgb, var(--card) 85%, transparent), transparent); backdrop-filter: blur(6px); border-bottom:1px solid var(--line) }
   .wrap{max-width:860px;margin:0 auto;padding:16px}
   h1{margin:0 0 4px; font-size:22px; letter-spacing:.2px}
   .sub{color:var(--muted);font-size:13px}
   .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px}
   .brand{display:flex; align-items:center; gap:12px}
-  .logo{
-    width:32px;height:32px;border-radius:10px;background:var(--bg);border:1px solid var(--line);
-    display:grid; place-items:center;
-  }
-  .logo::after{
-    content:''; display:block; width:24px; height:6px; border-radius:6px;
-    background:var(--accent);
-    box-shadow:0 12px 0 var(--accent), 0 24px 0 var(--accent);
-    transform:translateY(-6px);
-  }
-
-  .alpha{
-    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px;
-    color:var(--accent-2-ink);
-    background:linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 75%, #0a0 0%));
-    border:1px solid color-mix(in srgb, var(--accent-2) 65%, black);
-    border-radius:999px; padding:6px 10px;
-    box-shadow:0 4px 14px color-mix(in srgb, var(--accent-2) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.08);
-  }
+  .logo{ width:32px;height:32px;border-radius:10px;background:var(--bg);border:1px solid var(--line); display:grid; place-items:center }
+  .logo::after{ content:''; display:block; width:24px; height:6px; border-radius:6px; background:var(--accent); box-shadow:0 12px 0 var(--accent), 0 24px 0 var(--accent); transform:translateY(-6px) }
+  .alpha{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--accent-2-ink); background:linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 75%, #000 0%)); border:1px solid color-mix(in srgb, var(--accent-2) 65%, black); border-radius:999px; padding:6px 10px; box-shadow:0 4px 14px color-mix(in srgb, var(--accent-2) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.08) }
   .pill{font-size:12px;color:var(--muted)}
 
   .theme-switch{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px }
   .theme-select{ appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:10px; padding:6px 10px; cursor:pointer }
 
   .composer{ margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.2) }
-  textarea{
-    width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink);
-    border:1px solid color-mix(in srgb, var(--line) 75%, black 25%);
-    border-radius:12px; padding:12px; resize:vertical; outline:none;
-  }
+  textarea{ width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); border:1px solid color-mix(in srgb, var(--line) 75%, black 25%); border-radius:12px; padding:12px; resize:vertical; outline:none }
   textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent) }
   .row{display:flex; gap:12px; align-items:center; margin-top:10px}
-  .btn{
-    border:0; border-radius:12px; padding:10px 14px;
-    background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%));
-    color:#28150a; font-weight:800; cursor:pointer;
-    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.15);
-  }
+  .btn{ border:0; border-radius:12px; padding:10px 14px; background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%)); color:#28150a; font-weight:800; cursor:pointer; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.15) }
   .btn[disabled]{opacity:.55; cursor:not-allowed}
   .meta{margin-left:auto; color:var(--muted); font-size:12px}
 
@@ -112,6 +85,16 @@
 
   .notice{margin-top:8px; color:var(--warn); font-size:12px}
   a{color:var(--accent); text-decoration:none}
+
+  .replies{ margin-top:10px; border-top:1px dashed var(--line); padding-top:8px; display:flex; flex-direction:column; gap:8px }
+  .reply{ background:color-mix(in srgb, var(--card) 85%, black 15%); border:1px solid var(--line); border-radius:12px; padding:10px }
+  .reply .rhead{ display:flex; gap:8px; color:var(--muted); font-size:12px; margin-bottom:4px }
+  .reply .rflair{ font-weight:700; color:var(--ink) }
+  .reply .rcontent{ white-space:pre-wrap }
+
+  .replybox{ display:flex; gap:8px; margin-top:8px }
+  .replybox textarea{ min-height:60px }
+  .replybox .rbtn{ white-space:nowrap }
 
   .pager{display:flex; justify-content:center; margin:16px 0 32px}
   .pager .load-more{display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:999px; padding:10px 16px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); cursor:pointer}
@@ -144,6 +127,9 @@
               <option value="forest">Forest</option>
               <option value="sunset">Sunset</option>
               <option value="midnight">Midnight</option>
+              <option value="ocean">Ocean</option>
+              <option value="grape">Grape</option>
+              <option value="mono">Mono</option>
             </select>
           </div>
           <span class="pill" id="status">connecting…</span>
@@ -159,7 +145,10 @@
         <button class="btn" id="postBtn" aria-label="Post message">Post</button>
         <div class="meta"><span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s • you are <span id="meFlair"></span></div>
       </div>
-      <div class="notice">Be civil. Don’t post illegal or harmful content. Everything here is public. This is an <strong>alpha</strong>—content may be lost.</div>
+      <div class="notice">
+        Be civil. Don’t post illegal, harmful, or personal data. Everything here is public and may be removed.
+        This is an <strong>alpha</strong>—content may be lost.
+      </div>
     </section>
 
     <section class="feed" id="feed" aria-live="polite"></section>
@@ -211,12 +200,38 @@
     let nextCursor = null; // { created_at, id }
     const seen = new Set(); // post ids rendered
 
+    // --- Bad-words cache (from DB) ---
+    let BAD_WORDS = []; // [{word, category}, ...]
+    async function loadBadWords(){
+      const { data, error } = await sb.from('bad_words').select('word, category');
+      if (!error && data){ BAD_WORDS = data; }
+      else {
+        // Fallback minimal client list
+        BAD_WORDS = [
+          {word:'kys', category:'self-harm'},
+          {word:'kill yourself', category:'self-harm'},
+          {word:'suicide', category:'self-harm'},
+          {word:'rape', category:'harm'},
+          {word:'dox', category:'threat'},
+          {word:'swat', category:'threat'},
+          {word:'retard', category:'slur'},
+          {word:'faggot', category:'slur'},
+          {word:'nigger', category:'slur'},
+        ];
+      }
+    }
+    function needsNudge(text){
+      const t = text.toLowerCase();
+      // Word-boundary-ish check (simple). You can improve with regex from server list.
+      return BAD_WORDS.some(({word}) => t.includes(word));
+    }
+
     // --- Flair/session tag ---
     function loadOrCreateSessionTag(){
       const existing = localStorage.getItem('threadless_session_tag');
       if (existing) return existing;
-      const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie'];
-      const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren'];
+      const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie','Crimson','Sable','Verdant','Golden'];
+      const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren','Wolf','Heron','Bison','Ocelot'];
       const a = adjectives[Math.floor(Math.random()*adjectives.length)];
       const b = animals[Math.floor(Math.random()*animals.length)];
       const num = Math.floor(Math.random()*89)+11; // 11..99
@@ -245,11 +260,7 @@
     function toast(msg){ toastEl.textContent = msg; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none', 1600); }
     function showStatus(msg){ statusEl.textContent = msg; }
 
-    // --- Civility nudges (soft confirm) ---
-    const FLAGGED = ['kill yourself','kys','slur','retard','faggot','nigger','gas yourself','die','dox','d0x','swat','suicide','rape'];
-    function needsNudge(text){ const t = text.toLowerCase(); return FLAGGED.some(w => t.includes(w)); }
-
-    // --- Renderers ---
+    // --- Render: reactions/report row
     function emojiRow(post){
       const wrap = document.createElement('div');
       wrap.className = 'actions';
@@ -278,6 +289,48 @@
       return wrap;
     }
 
+    // --- Replies: renderer + composer
+    function repliesSection(post){
+      const box = document.createElement('div');
+      box.className = 'replies';
+      box.id = `replies_${post.id}`;
+
+      // Compose UI
+      const rbox = document.createElement('div');
+      rbox.className = 'replybox';
+      const ta = document.createElement('textarea');
+      ta.placeholder = 'Write a reply… (Enter to send, Shift+Enter for newline)';
+      ta.maxLength = 1000;
+      const btn = document.createElement('button');
+      btn.className = 'btn rbtn';
+      btn.textContent = 'Reply';
+      btn.addEventListener('click', ()=>sendReply(post.id, ta));
+      ta.addEventListener('keydown', (e)=>{
+        if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); btn.click(); }
+      });
+      rbox.append(ta, btn);
+
+      box.append(rbox);
+      return box;
+    }
+
+    function renderReply(row){
+      const el = document.createElement('div');
+      el.className = 'reply';
+      el.dataset.id = row.id;
+      const head = document.createElement('div');
+      head.className = 'rhead';
+      const f = document.createElement('span'); f.className = 'rflair'; f.textContent = row.flair || 'anon';
+      const dot = document.createElement('span'); dot.textContent = '·';
+      const t = document.createElement('span'); t.textContent = new Date(row.created_at).toLocaleString();
+      head.append(f, dot, t);
+      const body = document.createElement('div');
+      body.className = 'rcontent'; body.textContent = row.content;
+      el.append(head, body);
+      return el;
+    }
+
+    // --- Post renderer
     function renderPost(row){
       if (seen.has(row.id)) return null;
       seen.add(row.id);
@@ -290,10 +343,8 @@
       const flair = document.createElement('span');
       flair.className = 'flair';
       flair.textContent = (HAS_FLAIR && row.flair) ? row.flair : 'anon';
-      const dot = document.createElement('span');
-      dot.textContent = '·';
-      const time = document.createElement('span');
-      time.className = 'time';
+      const dot = document.createElement('span'); dot.textContent = '·';
+      const time = document.createElement('span'); time.className = 'time';
       time.textContent = new Date(row.created_at).toLocaleString();
       head.append(flair, dot, time);
 
@@ -301,7 +352,12 @@
       content.className = 'content';
       content.textContent = row.content;
 
-      el.append(head, content, emojiRow(row));
+      const actions = emojiRow(row);
+      const rsec = repliesSection(row);
+
+      el.append(head, content, actions, rsec);
+      // Load replies lazily
+      loadReplies(row.id);
       return el;
     }
 
@@ -315,7 +371,7 @@
       if (prepend) feedEl.prepend(frag); else feedEl.appendChild(frag);
     }
 
-    // --- Pagination via keyset with source + flair fallback ---
+    // --- Pagination (with source + flair fallback)
     async function fetchPage(cursor){
       const fields = HAS_FLAIR ? 'id, content, created_at, flair' : 'id, content, created_at';
       let q = sb.from(SOURCE)
@@ -332,15 +388,11 @@
 
       const { data, error, status } = await q;
 
-      // Fallback if view doesn't exist (404 or relation error)
       if ((status === 404 && SOURCE === 'posts_public') ||
           (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
-        SOURCE = 'posts';
-        showStatus('fallback');
-        return fetchPage(cursor);
+        SOURCE = 'posts'; showStatus('fallback'); return fetchPage(cursor);
       }
 
-      // Flair missing → retry without flair and remember
       if (status === 400 || (error && (error.code === '42703' || /flair.*does not exist/i.test(error.message||'')))){
         if (HAS_FLAIR){ HAS_FLAIR = false; return fetchPage(cursor); }
       }
@@ -387,7 +439,7 @@
       setLoading(false);
     }
 
-    // --- Reactions: load & update counts ---
+    // --- Reactions
     async function hydrateReactions(postIds){
       if (!REACTIONS_AVAILABLE || !postIds.length) return;
       const { data, error, status } = await sb.from('reactions')
@@ -421,59 +473,93 @@
           document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
           return;
         }
-        if (error){
-          // duplicate or other constraint → ignore quietly
-          console.warn('reaction error', error.message || error.code);
-        }else{
+        if (error){ console.warn('reaction error', error.message || error.code); }
+        else{
           const c = document.getElementById(`c_${post_id}_${emoji}`);
           if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
         }
-      } finally {
-        btn.disabled = false;
+      } finally { btn.disabled = false; }
+    }
+
+    // --- Reports
+    async function report(post_id){
+      if (!confirm('Report this post for moderation?')) return;
+
+      const ins = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
+      if (ins.error){
+        alert('Already reported or failed.');
+        console.warn('report error', ins.error);
+        return;
+      }
+      const cnt = await sb.from('reports')
+        .select('post_id', { count: 'exact', head: true })
+        .eq('post_id', post_id);
+      const total = cnt.count ?? 0;
+      if (total >= 3){
+        const node = document.querySelector(`.post[data-id="${post_id}"]`);
+        if (node) node.remove();
+        toast('Post hidden by community');
+      } else {
+        toast('Reported');
       }
     }
 
-    // --- Reports: insert; hide locally if threshold reached in source ---
-    async function report(post_id){
-  if (!confirm('Report this post for moderation?')) return;
+    // --- Replies: data ops
+    async function loadReplies(post_id){
+      const wrap = document.getElementById(`replies_${post_id}`);
+      if (!wrap) return;
+      const { data, error } = await sb.from('replies')
+        .select('id, content, created_at, flair')
+        .eq('post_id', post_id)
+        .order('created_at', { ascending: true })
+        .limit(200);
+      if (error){ console.warn('replies load error', error); return; }
+      // Remove any old rendered replies (keep composer = first child)
+      [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
+      (data||[]).forEach(r => wrap.insertBefore(renderReply(r), wrap.lastChild));
+    }
 
-  const ins = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
-  if (ins.error){
-    alert('Already reported or failed.');
-    console.warn('report error', ins.error);
-    return;
-  }
+    async function sendReply(post_id, textarea){
+      const content = sanitize(textarea.value);
+      if (!content) return;
+      if (needsNudge(content)){
+        const ok = confirm('This reply may be uncivil. Are you sure you want to post it?');
+        if (!ok) return;
+      }
+      textarea.disabled = true;
+      try{
+        const { error } = await sb.from('replies').insert({ post_id, content, flair: SESSION_TAG });
+        if (error) throw error;
+        textarea.value = '';
+        // rely on realtime to append; also fetch in case real-time lags
+        loadReplies(post_id);
+      }catch(e){
+        alert('Reply failed: ' + (e?.message || 'see console'));
+        console.error(e);
+      }finally{
+        textarea.disabled = false;
+      }
+    }
 
-  // Count reports and hide if threshold reached
-  const cnt = await sb.from('reports')
-    .select('post_id', { count: 'exact', head: true })
-    .eq('post_id', post_id);
-
-  const total = cnt.count ?? 0;
-  if (total >= 3){
-    const node = document.querySelector(`.post[data-id="${post_id}"]`);
-    if (node) node.remove();
-    toast('Post hidden by community');
-  } else {
-    toast('Reported');
-  }
-}
-
-
-    // --- Prompt of the day (uses current SOURCE for presence check) ---
+    // --- Prompt of the day (expanded list)
     const PROMPTS = [
       "What’s a tiny habit that changed your life?",
       "Describe a place you miss that no longer exists.",
       "What’s something you believed as a kid that’s still kind of true?",
       "Teach us a one-minute skill.",
-      "What’s the best question to ask a stranger?"
+      "What’s the best question to ask a stranger?",
+      "Share an unpopular opinion you can defend politely.",
+      "What’s the most useful thing you learned this month?",
+      "Describe your ideal 15-minute break.",
+      "What’s a problem you solved in a weird way?",
+      "What’s a small joy from today?"
     ];
     function todayKey(){ const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
 
     async function ensurePromptOfDay(){
       const key = localStorage.getItem('threadless_prompt_date');
       const today = todayKey();
-      if (key === today) return; // this browser already tried today
+      if (key === today) return;
 
       const start = new Date(); start.setHours(0,0,0,0);
       const end = new Date(); end.setHours(23,59,59,999);
@@ -481,7 +567,6 @@
       const { data, error } = await sb.from(SOURCE)
         .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
         .eq('flair','PromptBot').limit(1);
-
       if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
 
       const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
@@ -489,7 +574,7 @@
       localStorage.setItem('threadless_prompt_date', today);
     }
 
-    // --- Post flow (with civility nudge + flair fallback) ---
+    // --- Post flow (nudge uses server dictionary)
     textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
     textEl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }});
     postBtn.addEventListener('click', post);
@@ -499,18 +584,15 @@
         const r1 = await sb.from('posts').insert(payload);
         if (!r1.error) return r1;
         if (r1.error && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))){
-          HAS_FLAIR = false; // stop sending flair
-        } else {
-          return r1;
-        }
+          HAS_FLAIR = false;
+        } else { return r1; }
       }
-      return sb.from('posts').insert({ content: payload.content }); // retry without flair
+      return sb.from('posts').insert({ content: payload.content });
     }
 
     async function post(){
       const left = getCooldownLeft();
       if (left>0){ coolEl.textContent = left; return; }
-
       const content = sanitize(textEl.value);
       if (!content) return;
 
@@ -528,23 +610,22 @@
         setJustPosted();
         toast('Posted!');
       }catch(e){
-        alert('Post failed: ' + (e?.message || 'see console')); 
+        alert('Post failed: ' + (e?.message || 'see console'));
         console.error(e);
         showStatus(e?.message || 'insert error');
-      }finally{
-        postBtn.disabled = false;
-      }
+      }finally{ postBtn.disabled = false; }
     }
 
-    // --- Realtime: new posts/reports/reactions ---
+    // --- Realtime: posts, replies, reports, reactions, deletes
     async function subscribeRealtime(){
       sb.channel('threadless_posts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
           const node = renderPost(payload.new);
-          if (node) {
-            feedEl.prepend(node);
-            hydrateReactions([payload.new.id]);
-          }
+          if (node) { feedEl.prepend(node); hydrateReactions([payload.new.id]); }
+        })
+        .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
+          const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
+          if (el) el.remove();
         })
         .subscribe((state)=>{ showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
 
@@ -568,6 +649,18 @@
           })
           .subscribe();
       }
+
+      sb.channel('threadless_replies')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
+          const r = payload.new;
+          const wrap = document.getElementById(`replies_${r.post_id}`);
+          if (wrap){
+            const node = renderReply(r);
+            // Insert before composer (last child is composer row)
+            wrap.insertBefore(node, wrap.lastChild);
+          }
+        })
+        .subscribe();
     }
 
     // --- Pager + scroll ---
@@ -587,6 +680,7 @@
     // --- Boot ---
     (async function main(){
       showStatus('connecting…');
+      await loadBadWords();
       await initialLoad();
       await subscribeRealtime();
       await ensurePromptOfDay();
@@ -594,4 +688,3 @@
   </script>
 </body>
 </html>
-
