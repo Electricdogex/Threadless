@@ -232,20 +232,33 @@
     }
 
     // --- Flair/session tag ---
-    function loadOrCreateSessionTag(){
-      const existing = localStorage.getItem('threadless_session_tag');
-      if (existing) return existing;
-      const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie','Crimson','Sable','Verdant','Golden'];
-      const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren','Wolf','Heron','Bison','Ocelot'];
-      const a = adjectives[Math.floor(Math.random()*adjectives.length)];
-      const b = animals[Math.floor(Math.random()*animals.length)];
-      const num = Math.floor(Math.random()*89)+11; // 11..99
-      const tag = `${a}-${b}·${num}`;
-      localStorage.setItem('threadless_session_tag', tag);
-      return tag;
-    }
-    const SESSION_TAG = loadOrCreateSessionTag();
-    meFlairEl.textContent = SESSION_TAG;
+// Always generate a fresh, anonymous flair on page load.
+// (We deliberately ignore any stored value to maximize anonymity.)
+function makeTag(){
+  const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie','Crimson','Sable','Verdant','Golden','Nimbus','Boreal','Saffron','Umber'];
+  const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren','Wolf','Heron','Bison','Ocelot','Orca','Tern','Ibex','Dingo'];
+  const a = adjectives[Math.floor(Math.random()*adjectives.length)];
+  const b = animals[Math.floor(Math.random()*animals.length)];
+  const num = Math.floor(Math.random()*89)+11; // 11..99
+  return `${a}-${b}·${num}`;
+}
+
+// Global, mutable session flair (used for posts, replies, reports, reactions)
+let SESSION_TAG = makeTag();
+meFlairEl.textContent = SESSION_TAG;
+
+// Optional: store to sessionStorage (clears on tab close) for UX if you navigate within site
+try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
+
+function rerollTag(){
+  SESSION_TAG = makeTag();
+  meFlairEl.textContent = SESSION_TAG;
+  try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
+  toast('New anon flair!');
+}
+
+// Hook up the button
+document.getElementById('rerollBtn').addEventListener('click', rerollTag);
 
     // --- Theme handling ---
     const savedTheme = localStorage.getItem('threadless_theme') || 'forest';
@@ -725,4 +738,5 @@
   </script>
 </body>
 </html>
+
 
