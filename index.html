@@ -11,13 +11,13 @@
 <style>
   /* === Theme: dark green + dark orange === */
   :root{
-    --bg:#0e1613;        /* deep green-black */
-    --card:#122019;      /* panel green */
-    --ink:#e9f5ee;       /* near-white with green tint */
-    --muted:#9db7ab;     /* soft teal-gray */
-    --line:#1e2e27;      /* borders */
-    --accent:#ff8b3d;    /* dark orange */
-    --accent-2:#1f9d68;  /* saturated green */
+    --bg:#0e1613;
+    --card:#122019;
+    --ink:#e9f5ee;
+    --muted:#9db7ab;
+    --line:#1e2e27;
+    --accent:#ff8b3d;
+    --accent-2:#1f9d68;
     --accent-2-ink:#06120d;
   }
 
@@ -25,17 +25,17 @@
   html,body{height:100%}
   body{
     margin:0;
-    background:radial-gradient(1200px 600px at 20% -10%, #15231d 0%, transparent 60%),
-               radial-gradient(1000px 800px at 120% -20%, #1a2b23 0%, transparent 55%),
-               var(--bg);
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #15231d 0%, transparent 60%),
+      radial-gradient(1000px 800px at 120% -20%, #1a2b23 0%, transparent 55%),
+      var(--bg);
     color:var(--ink);
     font:16px/1.5 system-ui, Segoe UI, Inter, Arial, sans-serif;
   }
 
   header{
     position:sticky; top:0; z-index:3;
-    background:
-      linear-gradient(180deg, rgba(18,32,25,.8), rgba(18,32,25,0));
+    background:linear-gradient(180deg, rgba(18,32,25,.8), rgba(18,32,25,0));
     backdrop-filter: blur(6px);
     border-bottom:1px solid var(--line);
   }
@@ -45,38 +45,19 @@
   h1{margin:0 0 4px; font-size:22px; letter-spacing:.2px}
   .sub{color:var(--muted);font-size:13px}
 
-  .topbar{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
-  }
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px}
 
-  .brand{
-    display:flex; align-items:center; gap:12px;
-  }
+  .brand{display:flex; align-items:center; gap:12px}
 
   .logo{
     width:32px;height:32px;border-radius:10px;
-    background:
-      radial-gradient(120% 120% at 20% 10%, #1a2b23 0%, transparent 60%),
-      #0e1613;
-    border:1px solid var(--line);
+    background:#0e1613;border:1px solid var(--line);
     display:grid; place-items:center;
   }
-  .logo::before{
-    content:'';
-    display:block; width:18px; height:18px;
-    -webkit-mask: linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0);
-    -webkit-mask-composite: destination-out;
-    background:
-      linear-gradient(var(--accent),var(--accent));
-  }
-  /* Draw the three “threadless” lines using box-shadows (so it matches favicon) */
   .logo::after{
-    content:'';
-    display:block; width:24px; height:6px; border-radius:6px;
+    content:''; display:block; width:24px; height:6px; border-radius:6px;
     background:var(--accent);
-    box-shadow:
-      0 12px 0 0 var(--accent),
-      0 24px 0 0 var(--accent);
+    box-shadow:0 12px 0 var(--accent), 0 24px 0 var(--accent);
     transform:translateY(-6px);
   }
 
@@ -87,67 +68,59 @@
     border:1px solid #136d46;
     border-radius:999px;
     padding:6px 10px;
-    box-shadow: 0 4px 14px rgba(31,157,104,.25), inset 0 1px 0 rgba(255,255,255,.05);
+    box-shadow:0 4px 14px rgba(31,157,104,.25), inset 0 1px 0 rgba(255,255,255,.05);
   }
 
   .pill{font-size:12px;color:var(--muted)}
 
   .composer{
-    margin:16px 0;
-    padding:12px;
+    margin:16px 0;padding:12px;
     background:var(--card);
     border:1px solid var(--line);
     border-radius:16px;
-    box-shadow: 0 10px 30px rgba(0,0,0,.2);
   }
   textarea{
-    width:100%; min-height:110px;
-    background:#0b1410; color:var(--ink);
+    width:100%;min-height:110px;
+    background:#0b1410;color:var(--ink);
     border:1px solid #243b2f;
-    border-radius:12px; padding:12px; resize:vertical; outline:none;
-    transition:border-color .15s ease, box-shadow .15s ease;
+    border-radius:12px;padding:12px;resize:vertical;outline:none;
   }
   textarea:focus{
     border-color:#2b5a47;
-    box-shadow: 0 0 0 4px rgba(31,157,104,.15);
+    box-shadow:0 0 0 4px rgba(31,157,104,.15);
   }
 
-  .row{display:flex; gap:12px; align-items:center; margin-top:10px}
+  .row{display:flex;gap:12px;align-items:center;margin-top:10px}
 
   .btn{
-    border:0; border-radius:12px; padding:10px 14px;
-    background:linear-gradient(180deg, var(--accent), #e5752d);
-    color:#27160a; font-weight:800; cursor:pointer;
-    box-shadow: 0 6px 18px rgba(255,139,61,.25), inset 0 1px 0 rgba(255,255,255,.15);
-    transition: transform .06s ease;
+    border:0;border-radius:12px;padding:10px 14px;
+    background:linear-gradient(180deg,var(--accent),#e5752d);
+    color:#27160a;font-weight:800;cursor:pointer;
   }
-  .btn:hover{ transform: translateY(-1px); }
-  .btn:active{ transform: translateY(0); }
-  .btn[disabled]{opacity:.55; cursor:not-allowed}
+  .btn[disabled]{opacity:.55;cursor:not-allowed}
 
-  .meta{margin-left:auto; color:var(--muted); font-size:12px}
+  .meta{margin-left:auto;color:var(--muted);font-size:12px}
 
-  .feed{display:flex; flex-direction:column; gap:12px; margin:20px 0}
-
+  .feed{display:flex;flex-direction:column;gap:12px;margin:20px 0}
   .post{
     padding:14px 14px 10px;
-    background:linear-gradient(180deg, rgba(255,139,61,.05), transparent 35%) , var(--card);
+    background:linear-gradient(180deg, rgba(255,139,61,.05), transparent 35%), var(--card);
     border:1px solid var(--line);
     border-radius:16px;
   }
-  .content{white-space:pre-wrap; word-wrap:break-word}
-  .time{margin-top:8px; color:var(--muted); font-size:12px}
+  .content{white-space:pre-wrap;word-wrap:break-word}
+  .time{margin-top:8px;color:var(--muted);font-size:12px}
 
-  .notice{margin-top:8px; color:#ffd08f; font-size:12px}
-  a{color:var(--accent); text-decoration:none}
-  footer{color:var(--muted); font-size:12px; margin:36px 0}
+  .notice{margin-top:8px;color:#ffd08f;font-size:12px}
+  a{color:var(--accent);text-decoration:none}
 
-  /* tiny badge next to the title in the feed header (optional accent) */
-  .status-dot{
-    display:inline-block; width:8px; height:8px; border-radius:50%;
-    background:var(--accent-2); margin-right:6px;
-    box-shadow:0 0 0 3px rgba(31,157,104,.15);
+  footer{
+    color:var(--muted);
+    font-size:12px;
+    margin:36px 0;
+    text-align:center;
   }
+  footer .copyright{margin-top:8px;color:var(--muted);font-size:11px}
 </style>
 </head>
 <body>
@@ -161,8 +134,8 @@
             <div class="sub">A single, continuous anonymous board · <strong>ALPHA PROTOTYPE</strong></div>
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span class="alpha" title="Early build—things will break">Alpha Prototype</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="alpha">Alpha Prototype</span>
           <span class="pill" id="status">connecting…</span>
         </div>
       </div>
@@ -170,123 +143,88 @@
   </header>
 
   <main class="wrap">
-    <section class="composer" aria-label="Create a post">
+    <section class="composer">
       <textarea id="text" maxlength="1000" placeholder="Share a thought… (Enter to post, Shift+Enter = newline)"></textarea>
       <div class="row">
-        <button class="btn" id="postBtn" aria-label="Post message">Post</button>
-        <div class="meta">
-          <span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s
-        </div>
+        <button class="btn" id="postBtn">Post</button>
+        <div class="meta"><span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s</div>
       </div>
       <div class="notice">Be civil. Don’t post illegal or harmful content. Everything here is public. This is an <strong>alpha</strong>—content may be lost.</div>
     </section>
 
-    <section class="feed" id="feed" aria-live="polite"></section>
+    <section class="feed" id="feed"></section>
 
     <footer>
-      <span class="status-dot"></span>Tip: open in two tabs to see realtime updates. Posts are immutable in this MVP.
+      <div>Tip: open in two tabs to see realtime updates. Posts are immutable in this MVP.</div>
+      <div class="copyright">© 2022–2025 Chrome Gear Software</div>
     </footer>
   </main>
 
   <!-- Supabase client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    // --- Supabase keys (yours) ---
     const SUPABASE_URL = "https://hqwerxoapoczigetylfj.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhxd2VyeG9hcG9jemlnZXR5bGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNTIyNTQsImV4cCI6MjA3MTgyODI1NH0.-MGwuD5NzuHo23GrYD-GsSdeGKoVh_ggDGqp0v7eXoo";
-
-    // --- Client ---
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // --- UI refs ---
-    const statusEl = document.getElementById('status');
-    const textEl   = document.getElementById('text');
-    const postBtn  = document.getElementById('postBtn');
-    const feedEl   = document.getElementById('feed');
-    const countEl  = document.getElementById('count');
-    const coolEl   = document.getElementById('cool');
+    const statusEl=document.getElementById('status');
+    const textEl=document.getElementById('text');
+    const postBtn=document.getElementById('postBtn');
+    const feedEl=document.getElementById('feed');
+    const countEl=document.getElementById('count');
+    const coolEl=document.getElementById('cool');
 
-    // --- Helpers ---
-    const COOLDOWN_SEC = 15;
-    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
-    const nowSec = ()=>Math.floor(Date.now()/1000);
-    function getCooldownLeft(){ const last = Number(localStorage.getItem('lastPostTs')||'0'); return Math.max(0,(last+COOLDOWN_SEC)-nowSec()); }
-    function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
-    function sanitize(s){ return s.replace(/^\s+|\s+$/g,''); } // trim
+    const COOLDOWN_SEC=15;
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const nowSec=()=>Math.floor(Date.now()/1000);
+    function getCooldownLeft(){const last=Number(localStorage.getItem('lastPostTs')||'0');return Math.max(0,(last+COOLDOWN_SEC)-nowSec());}
+    function setJustPosted(){localStorage.setItem('lastPostTs', String(nowSec()));}
+    function sanitize(s){return s.trim();}
 
     function renderPost(row){
-      const el = document.createElement('div');
-      el.className = 'post';
-      el.innerHTML = `
-        <div class="content"></div>
-        <div class="time">${new Date(row.created_at).toLocaleString()} · anon</div>`;
-      el.querySelector('.content').textContent = row.content; // textContent prevents HTML injection
+      const el=document.createElement('div');
+      el.className='post';
+      el.innerHTML=`<div class="content"></div><div class="time">${new Date(row.created_at).toLocaleString()} · anon</div>`;
+      el.querySelector('.content').textContent=row.content;
       return el;
     }
 
-    // --- Load latest ---
     async function loadRecent(){
-      const { data, error } = await sb.from('posts')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-      if (error) { console.error(error); statusEl.textContent = 'load error'; return; }
-      feedEl.innerHTML = '';
-      data.forEach(row => feedEl.appendChild(renderPost(row)));
+      const { data, error }=await sb.from('posts').select('*').order('created_at',{ascending:false}).limit(100);
+      if(error){console.error(error);statusEl.textContent='load error';return;}
+      feedEl.innerHTML='';data.forEach(r=>feedEl.appendChild(renderPost(r)));
     }
 
-    // --- Realtime subscribe ---
     async function subscribeRealtime(){
       sb.channel('threadless')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, payload => {
-          feedEl.prepend(renderPost(payload.new));
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'posts'},p=>{
+          feedEl.prepend(renderPost(p.new));
         })
-        .subscribe((state) => {
-          statusEl.textContent = (state === 'SUBSCRIBED') ? 'online' : state.toLowerCase();
+        .subscribe((state)=>{
+          statusEl.textContent=(state==='SUBSCRIBED')?'online':state.toLowerCase();
         });
     }
 
-    // --- Posting ---
     async function post(){
-      const left = getCooldownLeft();
-      if (left>0){ coolEl.textContent = left; return; }
-
-      const content = sanitize(textEl.value);
-      if (!content) return;
-
-      postBtn.disabled = true;
+      const left=getCooldownLeft();
+      if(left>0){coolEl.textContent=left;return;}
+      const content=sanitize(textEl.value);
+      if(!content)return;
+      postBtn.disabled=true;
       try{
-        const { error } = await sb.from('posts').insert({ content });
-        if (error) throw error;
-        textEl.value = '';
-        countEl.textContent = '0';
-        setJustPosted();
-      }catch(e){
-        alert('Post failed (see console).');
-        console.error(e);
-      }finally{
-        postBtn.disabled = false;
-      }
+        const { error }=await sb.from('posts').insert({ content });
+        if(error)throw error;
+        textEl.value='';countEl.textContent='0';setJustPosted();
+      }catch(e){alert('Post failed (see console).');console.error(e);}
+      finally{postBtn.disabled=false;}
     }
 
-    // --- Events ---
-    textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
-    textEl.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }
-    });
-    postBtn.addEventListener('click', post);
+    textEl.addEventListener('input',()=>{countEl.textContent=textEl.value.length;});
+    textEl.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();post();}});
+    postBtn.addEventListener('click',post);
 
-    // --- Cooldown ticker ---
-    (async function tick(){
-      while(true){ coolEl.textContent = getCooldownLeft(); await sleep(500); }
-    })();
-
-    // --- Boot ---
-    (async function main(){
-      statusEl.textContent = 'connecting…';
-      await loadRecent();
-      await subscribeRealtime();
-    })();
+    (async function tick(){while(true){coolEl.textContent=getCooldownLeft();await sleep(500);}})();
+    (async function main(){statusEl.textContent='connecting…';await loadRecent();await subscribeRealtime();})();
   </script>
 </body>
 </html>
