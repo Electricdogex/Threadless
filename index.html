@@ -3,64 +3,188 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Threadless</title>
+<title>Threadless · ALPHA</title>
 
-<!-- Tiny inline favicon (no extra files) -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%234aa8ff' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- Inline favicon (updated to green/orange) -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1613'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%23ff8b3d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
 
 <style>
-  :root { --bg:#0b0f14; --card:#121923; --muted:#8aa0b8; --ink:#e8eef6; --accent:#4aa8ff; }
+  /* === Theme: dark green + dark orange === */
+  :root{
+    --bg:#0e1613;        /* deep green-black */
+    --card:#122019;      /* panel green */
+    --ink:#e9f5ee;       /* near-white with green tint */
+    --muted:#9db7ab;     /* soft teal-gray */
+    --line:#1e2e27;      /* borders */
+    --accent:#ff8b3d;    /* dark orange */
+    --accent-2:#1f9d68;  /* saturated green */
+    --accent-2-ink:#06120d;
+  }
+
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,Segoe UI,Inter,Arial}
-  header{position:sticky;top:0;background:linear-gradient(180deg,#0b0f1488,#0b0f1400);backdrop-filter:blur(6px);border-bottom:1px solid #1d2733;z-index:2}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 600px at 20% -10%, #15231d 0%, transparent 60%),
+               radial-gradient(1000px 800px at 120% -20%, #1a2b23 0%, transparent 55%),
+               var(--bg);
+    color:var(--ink);
+    font:16px/1.5 system-ui, Segoe UI, Inter, Arial, sans-serif;
+  }
+
+  header{
+    position:sticky; top:0; z-index:3;
+    background:
+      linear-gradient(180deg, rgba(18,32,25,.8), rgba(18,32,25,0));
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid var(--line);
+  }
+
   .wrap{max-width:860px;margin:0 auto;padding:16px}
-  h1{margin:0 0 6px;font-size:20px}
+
+  h1{margin:0 0 4px; font-size:22px; letter-spacing:.2px}
   .sub{color:var(--muted);font-size:13px}
-  .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between}
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+  }
+
+  .brand{
+    display:flex; align-items:center; gap:12px;
+  }
+
+  .logo{
+    width:32px;height:32px;border-radius:10px;
+    background:
+      radial-gradient(120% 120% at 20% 10%, #1a2b23 0%, transparent 60%),
+      #0e1613;
+    border:1px solid var(--line);
+    display:grid; place-items:center;
+  }
+  .logo::before{
+    content:'';
+    display:block; width:18px; height:18px;
+    -webkit-mask: linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+    -webkit-mask-composite: destination-out;
+    background:
+      linear-gradient(var(--accent),var(--accent));
+  }
+  /* Draw the three “threadless” lines using box-shadows (so it matches favicon) */
+  .logo::after{
+    content:'';
+    display:block; width:24px; height:6px; border-radius:6px;
+    background:var(--accent);
+    box-shadow:
+      0 12px 0 0 var(--accent),
+      0 24px 0 0 var(--accent);
+    transform:translateY(-6px);
+  }
+
+  .alpha{
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px;
+    color:var(--accent-2-ink);
+    background:linear-gradient(180deg, #27b278, #198657);
+    border:1px solid #136d46;
+    border-radius:999px;
+    padding:6px 10px;
+    box-shadow: 0 4px 14px rgba(31,157,104,.25), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+
   .pill{font-size:12px;color:var(--muted)}
-  .composer{margin:16px 0;padding:12px;background:var(--card);border:1px solid #1d2733;border-radius:16px}
-  textarea{width:100%;min-height:96px;background:#0e141c;color:var(--ink);border:1px solid #243244;border-radius:12px;padding:12px;resize:vertical;outline:none}
-  .row{display:flex;gap:12px;align-items:center;margin-top:10px}
-  .btn{border:0;border-radius:12px;padding:10px 14px;background:var(--accent);color:#031222;font-weight:700;cursor:pointer}
-  .btn[disabled]{opacity:.5;cursor:not-allowed}
-  .meta{margin-left:auto;color:var(--muted);font-size:12px}
-  .feed{display:flex;flex-direction:column;gap:12px;margin:20px 0}
-  .post{padding:14px;background:var(--card);border:1px solid #1d2733;border-radius:16px}
-  .content{white-space:pre-wrap;word-wrap:break-word}
-  .time{margin-top:8px;color:var(--muted);font-size:12px}
-  .notice{margin-top:8px;color:#ffca6b;font-size:12px}
-  a{color:var(--accent);text-decoration:none}
-  footer{color:var(--muted);font-size:12px;margin:36px 0}
+
+  .composer{
+    margin:16px 0;
+    padding:12px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  }
+  textarea{
+    width:100%; min-height:110px;
+    background:#0b1410; color:var(--ink);
+    border:1px solid #243b2f;
+    border-radius:12px; padding:12px; resize:vertical; outline:none;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  textarea:focus{
+    border-color:#2b5a47;
+    box-shadow: 0 0 0 4px rgba(31,157,104,.15);
+  }
+
+  .row{display:flex; gap:12px; align-items:center; margin-top:10px}
+
+  .btn{
+    border:0; border-radius:12px; padding:10px 14px;
+    background:linear-gradient(180deg, var(--accent), #e5752d);
+    color:#27160a; font-weight:800; cursor:pointer;
+    box-shadow: 0 6px 18px rgba(255,139,61,.25), inset 0 1px 0 rgba(255,255,255,.15);
+    transition: transform .06s ease;
+  }
+  .btn:hover{ transform: translateY(-1px); }
+  .btn:active{ transform: translateY(0); }
+  .btn[disabled]{opacity:.55; cursor:not-allowed}
+
+  .meta{margin-left:auto; color:var(--muted); font-size:12px}
+
+  .feed{display:flex; flex-direction:column; gap:12px; margin:20px 0}
+
+  .post{
+    padding:14px 14px 10px;
+    background:linear-gradient(180deg, rgba(255,139,61,.05), transparent 35%) , var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+  }
+  .content{white-space:pre-wrap; word-wrap:break-word}
+  .time{margin-top:8px; color:var(--muted); font-size:12px}
+
+  .notice{margin-top:8px; color:#ffd08f; font-size:12px}
+  a{color:var(--accent); text-decoration:none}
+  footer{color:var(--muted); font-size:12px; margin:36px 0}
+
+  /* tiny badge next to the title in the feed header (optional accent) */
+  .status-dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--accent-2); margin-right:6px;
+    box-shadow:0 0 0 3px rgba(31,157,104,.15);
+  }
 </style>
 </head>
 <body>
   <header>
     <div class="wrap">
       <div class="topbar">
-        <div>
-          <h1>Threadless</h1>
-          <div class="sub">A single, continuously updating anonymous text board.</div>
+        <div class="brand">
+          <div class="logo" aria-hidden="true"></div>
+          <div>
+            <h1>Threadless</h1>
+            <div class="sub">A single, continuous anonymous board · <strong>ALPHA PROTOTYPE</strong></div>
+          </div>
         </div>
-        <div class="pill" id="status">connecting…</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="alpha" title="Early build—things will break">Alpha Prototype</span>
+          <span class="pill" id="status">connecting…</span>
+        </div>
       </div>
     </div>
   </header>
 
   <main class="wrap">
-    <section class="composer">
+    <section class="composer" aria-label="Create a post">
       <textarea id="text" maxlength="1000" placeholder="Share a thought… (Enter to post, Shift+Enter = newline)"></textarea>
       <div class="row">
-        <button class="btn" id="postBtn">Post</button>
-        <div class="meta"><span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s</div>
+        <button class="btn" id="postBtn" aria-label="Post message">Post</button>
+        <div class="meta">
+          <span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s
+        </div>
       </div>
-      <div class="notice">Be civil. Don’t post illegal or harmful content. This is public.</div>
+      <div class="notice">Be civil. Don’t post illegal or harmful content. Everything here is public. This is an <strong>alpha</strong>—content may be lost.</div>
     </section>
 
-    <section class="feed" id="feed"></section>
+    <section class="feed" id="feed" aria-live="polite"></section>
 
     <footer>
-      Tip: open this page in two tabs to see realtime updates. Posts are immutable in this MVP.
+      <span class="status-dot"></span>Tip: open in two tabs to see realtime updates. Posts are immutable in this MVP.
     </footer>
   </main>
 
@@ -89,13 +213,14 @@
     function getCooldownLeft(){ const last = Number(localStorage.getItem('lastPostTs')||'0'); return Math.max(0,(last+COOLDOWN_SEC)-nowSec()); }
     function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
     function sanitize(s){ return s.replace(/^\s+|\s+$/g,''); } // trim
+
     function renderPost(row){
       const el = document.createElement('div');
       el.className = 'post';
       el.innerHTML = `
         <div class="content"></div>
-        <div class="time">${new Date(row.created_at).toLocaleString()} • anon</div>`;
-      el.querySelector('.content').textContent = row.content; // safe
+        <div class="time">${new Date(row.created_at).toLocaleString()} · anon</div>`;
+      el.querySelector('.content').textContent = row.content; // textContent prevents HTML injection
       return el;
     }
 
@@ -114,7 +239,6 @@
     async function subscribeRealtime(){
       sb.channel('threadless')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, payload => {
-          // Prepend newest post
           feedEl.prepend(renderPost(payload.new));
         })
         .subscribe((state) => {
@@ -166,4 +290,3 @@
   </script>
 </body>
 </html>
-
