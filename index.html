@@ -19,7 +19,6 @@
 
 <!-- Favicon -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1613'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%23ff8b3d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
-
 <style>
   /* === Themes === */
   :root{
@@ -85,6 +84,9 @@
   .notice{margin-top:8px; color:var(--warn); font-size:12px}
   a{color:var(--accent); text-decoration:none}
 
+  .btn.mini{ padding:6px 10px; font-weight:700; margin-left:8px }
+
+  
   .replies{ margin-top:10px; border-top:1px dashed var(--line); padding-top:8px; display:flex; flex-direction:column; gap:8px }
   .reply{ background:color-mix(in srgb, var(--card) 85%, black 15%); border:1px solid var(--line); border-radius:12px; padding:10px }
   .reply .rhead{ display:flex; gap:8px; color:var(--muted); font-size:12px; margin-bottom:4px }
@@ -142,7 +144,12 @@
       <textarea id="text" maxlength="1000" placeholder="Share a thought… (Enter to post, Shift+Enter = newline)"></textarea>
       <div class="row">
         <button class="btn" id="postBtn" aria-label="Post message">Post</button>
-        <div class="meta"><span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s • you are <span id="meFlair"></span></div>
+        <div class="meta">
+  <span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s • you are
+  <span id="meFlair"></span>
+  <button class="btn mini" id="rerollBtn" type="button" title="Get a new anonymous flair">Reroll</button>
+</div>
+
       </div>
       <div class="notice">
         Be civil. Don’t post illegal, harmful, or personal data. Everything here is public and may be removed.
@@ -718,3 +725,4 @@
   </script>
 </body>
 </html>
+
