@@ -76,26 +76,17 @@
   }
   .pill{font-size:12px;color:var(--muted)}
 
-  .theme-switch{
-    display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px;
-  }
-  .theme-select{
-    appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink);
-    border-radius:10px; padding:6px 10px; cursor:pointer;
-  }
+  .theme-switch{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px }
+  .theme-select{ appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:10px; padding:6px 10px; cursor:pointer }
 
-  .composer{
-    margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:16px;
-    box-shadow:0 10px 30px rgba(0,0,0,.2);
-  }
+  .composer{ margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.2) }
   textarea{
     width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink);
     border:1px solid color-mix(in srgb, var(--line) 75%, black 25%);
     border-radius:12px; padding:12px; resize:vertical; outline:none;
   }
-  textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent); }
+  textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent) }
   .row{display:flex; gap:12px; align-items:center; margin-top:10px}
-
   .btn{
     border:0; border-radius:12px; padding:10px 14px;
     background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%));
@@ -106,20 +97,13 @@
   .meta{margin-left:auto; color:var(--muted); font-size:12px}
 
   .feed{display:flex; flex-direction:column; gap:12px; margin:20px 0}
-  .post{
-    padding:14px 14px 10px;
-    background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 35%), var(--card);
-    border:1px solid var(--line); border-radius:16px;
-  }
+  .post{padding:14px 14px 10px; background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 35%), var(--card); border:1px solid var(--line); border-radius:16px}
   .headerline{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; margin-bottom:6px}
   .flair{font-weight:700; color:var(--ink)}
   .content{white-space:pre-wrap; word-wrap:break-word}
   .time{margin-top:8px; color:var(--muted); font-size:12px}
 
-  .actions{
-    display:flex; align-items:center; gap:10px; margin-top:10px; user-select:none;
-    color:var(--muted); font-size:13px;
-  }
+  .actions{display:flex; align-items:center; gap:10px; margin-top:10px; user-select:none; color:var(--muted); font-size:13px}
   .emoji{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:color-mix(in srgb, var(--bg) 92%, black 8%); cursor:pointer}
   .emoji[disabled]{opacity:.5; cursor:not-allowed}
   .count{color:var(--ink)}
@@ -130,11 +114,7 @@
   a{color:var(--accent); text-decoration:none}
 
   .pager{display:flex; justify-content:center; margin:16px 0 32px}
-  .pager .load-more{
-    display:inline-flex; align-items:center; gap:8px;
-    border:1px solid var(--line); border-radius:999px; padding:10px 16px;
-    background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); cursor:pointer;
-  }
+  .pager .load-more{display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:999px; padding:10px 16px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); cursor:pointer}
   .pager .load-more[disabled]{opacity:.6; cursor:not-allowed}
   .spinner{width:14px; height:14px; border:2px solid color-mix(in srgb, var(--accent-2) 60%, transparent); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -225,6 +205,7 @@
     // --- Settings/state ---
     const COOLDOWN_SEC = 15;
     const PAGE_SIZE = 30;
+    let SOURCE = 'posts_public'; // will auto-fallback to 'posts' if missing
     let nextCursor = null; // { created_at, id }
     const seen = new Set(); // post ids rendered
 
@@ -260,21 +241,14 @@
     function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
     function sanitize(s){ return s.trim(); }
     function toast(msg){ toastEl.textContent = msg; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none', 1600); }
+    function showStatus(msg){ statusEl.textContent = msg; }
 
     // --- Civility nudges (soft confirm) ---
-    const FLAGGED = [
-      // keep this lightweight; you can expand server-side later
-      'kill yourself','kys','slur','retard','faggot','nigger','gas yourself','die',
-      'dox','d0x','swat','suicide','rape'
-    ];
-    function needsNudge(text){
-      const t = text.toLowerCase();
-      return FLAGGED.some(w => t.includes(w));
-    }
+    const FLAGGED = ['kill yourself','kys','slur','retard','faggot','nigger','gas yourself','die','dox','d0x','swat','suicide','rape'];
+    function needsNudge(text){ const t = text.toLowerCase(); return FLAGGED.some(w => t.includes(w)); }
 
     // --- Renderers ---
     function emojiRow(post){
-      // Create reaction buttons with counts; ids map to emoji keys
       const wrap = document.createElement('div');
       wrap.className = 'actions';
       const emojis = [
@@ -338,10 +312,9 @@
       if (prepend) feedEl.prepend(frag); else feedEl.appendChild(frag);
     }
 
-    // --- Pagination via keyset on posts_public view ---
+    // --- Pagination via keyset with source fallback ---
     async function fetchPage(cursor){
-      // Use the view so server auto-hides reported posts (>=3)
-      let q = sb.from('posts_public')
+      let q = sb.from(SOURCE)
         .select('id, content, created_at, flair')
         .order('created_at', { ascending:false })
         .order('id', { ascending:false })
@@ -353,8 +326,24 @@
         q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
       }
 
-      const { data, error } = await q;
-      if (error){ console.error('SELECT error:', error); statusEl.textContent = 'load error'; return { rows:[], hasMore:false }; }
+      const { data, error, status } = await q;
+
+      // Fallback if view doesn't exist (404 or relation error)
+      if (
+        (status === 404 && SOURCE === 'posts_public') ||
+        (error && (/posts_public/gi.test(error.message||'') || (error.code === '42P01')))
+      ){
+        SOURCE = 'posts';
+        showStatus('fallback');
+        return fetchPage(cursor);
+      }
+
+      if (error){
+        console.error('SELECT error:', error);
+        showStatus(error.message || 'load error');
+        return { rows:[], hasMore:false, newCursor:null };
+      }
+
       const rows = data || [];
       const last = rows[rows.length - 1] || null;
       const hasMore = rows.length === PAGE_SIZE;
@@ -416,7 +405,7 @@
       try{
         const { error } = await sb.from('reactions').insert({ post_id, session_tag: SESSION_TAG, emoji });
         if (error){
-          // duplicate (already reacted with that emoji) -> ignore silently
+          // duplicate or other constraint → ignore quietly
           console.warn('reaction error', error.message || error.code);
         }else{
           const c = document.getElementById(`c_${post_id}_${emoji}`);
@@ -427,7 +416,7 @@
       }
     }
 
-    // --- Reports: insert; server view hides at 3+ ---
+    // --- Reports: insert; hide locally if threshold reached in source ---
     async function report(post_id){
       if (!confirm('Report this post for moderation?')) return;
       const { error } = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
@@ -436,13 +425,8 @@
         console.warn('report error', error);
         return;
       }
-      // Check if it crossed threshold; if so, remove immediately
-      const { data, error: cntErr } = await sb.from('reports').select('post_id', { count: 'exact', head: true }).eq('post_id', post_id);
-      const total = cntErr ? 0 : (data === null ? 0 : data); // supabase-js v2 sets count on response.count; adjust:
-      // safer: re-query count:
-      const cRes = await sb.rpc('noop').catch(()=>({})); // placeholder if needed
-      // Instead, just refetch that post via the view; if missing -> remove
-      const check = await sb.from('posts_public').select('id').eq('id', post_id).maybeSingle();
+      // Check visibility via current SOURCE; if missing from SOURCE, remove
+      const check = await sb.from(SOURCE).select('id').eq('id', post_id).maybeSingle();
       if (!check.data){
         const node = document.querySelector(`.post[data-id="${post_id}"]`);
         if (node) node.remove();
@@ -452,7 +436,7 @@
       }
     }
 
-    // --- Prompt of the day (best-effort, client-side) ---
+    // --- Prompt of the day (uses current SOURCE for presence check) ---
     const PROMPTS = [
       "What’s a tiny habit that changed your life?",
       "Describe a place you miss that no longer exists.",
@@ -466,23 +450,34 @@
       const key = localStorage.getItem('threadless_prompt_date');
       const today = todayKey();
       if (key === today) return; // this browser already tried today
-      // Check if a prompt exists today (simple heuristic: flair = 'PromptBot')
+
       const start = new Date(); start.setHours(0,0,0,0);
       const end = new Date(); end.setHours(23,59,59,999);
-      const { data, error } = await sb.from('posts_public')
+
+      const { data, error } = await sb.from(SOURCE)
         .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
         .eq('flair','PromptBot').limit(1);
+
       if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
-      // Post one prompt
+
+      // Post one prompt to the table (not the view)
       const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
-      await sb.from('posts').insert({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
+      await insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
       localStorage.setItem('threadless_prompt_date', today);
     }
 
-    // --- Civility nudge + Post flow ---
+    // --- Post flow (with civility nudge + flair fallback) ---
     textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
     textEl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }});
     postBtn.addEventListener('click', post);
+
+    async function insertPost(payload){
+      let res = await sb.from('posts').insert(payload);
+      if (res.error && /flair/i.test(res.error.message||'')){
+        res = await sb.from('posts').insert({ content: payload.content });
+      }
+      return res;
+    }
 
     async function post(){
       const left = getCooldownLeft();
@@ -498,20 +493,23 @@
 
       postBtn.disabled = true;
       try{
-        const { error } = await sb.from('posts').insert({ content, flair: SESSION_TAG });
+        const { error } = await insertPost({ content, flair: SESSION_TAG });
         if (error) throw error;
-        textEl.value = ''; countEl.textContent = '0'; setJustPosted();
+        textEl.value = '';
+        countEl.textContent = '0';
+        setJustPosted();
         toast('Posted!');
       }catch(e){
-        alert('Post failed (see console).'); console.error(e);
+        alert('Post failed: ' + (e?.message || 'see console')); 
+        console.error(e);
+        showStatus(e?.message || 'insert error');
       }finally{
         postBtn.disabled = false;
       }
     }
 
-    // --- Realtime: new posts (they’ll all be < 3 reports on insert) ---
+    // --- Realtime: new posts/reports/reactions ---
     async function subscribeRealtime(){
-      // New posts
       sb.channel('threadless_posts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
           const node = renderPost(payload.new);
@@ -520,22 +518,19 @@
             hydrateReactions([payload.new.id]);
           }
         })
-        .subscribe((state)=>{ statusEl.textContent = (state === 'SUBSCRIBED') ? 'online' : state.toLowerCase(); });
+        .subscribe((state)=>{ showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
 
-      // Reports: if a post crosses the threshold, it will disappear from the view.
       sb.channel('threadless_reports')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
           const pid = payload.new.post_id;
-          // re-check visibility via the view
-          const check = await sb.from('posts_public').select('id').eq('id', pid).maybeSingle();
+          const check = await sb.from(SOURCE).select('id').eq('id', pid).maybeSingle();
           if (!check.data){
             const el = document.querySelector(`.post[data-id="${pid}"]`);
             if (el) el.remove();
           }
         })
         .subscribe();
-      
-      // Reactions: bump counts live
+
       sb.channel('threadless_reacts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
           const { post_id, emoji } = payload.new;
@@ -561,7 +556,7 @@
 
     // --- Boot ---
     (async function main(){
-      statusEl.textContent = 'connecting…';
+      showStatus('connecting…');
       await initialLoad();
       await subscribeRealtime();
       await ensurePromptOfDay();
