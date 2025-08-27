@@ -15,6 +15,7 @@
   script-src 'self' https://cdn.jsdelivr.net https://cdn.skypack.dev 'unsafe-inline';
   connect-src 'self' https://*.supabase.co wss://*.supabase.co;
   upgrade-insecure-requests;">
+<meta http-equiv="Referrer-Policy" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 
 <!-- Favicon -->
@@ -59,6 +60,10 @@
   .theme-switch{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px }
   .theme-select{ appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:10px; padding:6px 10px; cursor:pointer }
 
+  /* Mature toggle */
+  .switch{display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12px}
+  .switch input{ width:16px; height:16px; cursor:pointer }
+
   .composer{ margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.2) }
   textarea{ width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); border:1px solid color-mix(in srgb, var(--line) 75%, black 25%); border-radius:12px; padding:12px; resize:vertical; outline:none }
   textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent) }
@@ -86,7 +91,6 @@
 
   .btn.mini{ padding:6px 10px; font-weight:700; margin-left:8px }
 
-  
   .replies{ margin-top:10px; border-top:1px dashed var(--line); padding-top:8px; display:flex; flex-direction:column; gap:8px }
   .reply{ background:color-mix(in srgb, var(--card) 85%, black 15%); border:1px solid var(--line); border-radius:12px; padding:10px }
   .reply .rhead{ display:flex; gap:8px; color:var(--muted); font-size:12px; margin-bottom:4px }
@@ -122,6 +126,7 @@
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
           <span class="alpha">Alpha Prototype</span>
+
           <div class="theme-switch">
             Theme:
             <select id="theme" class="theme-select" aria-label="Select theme">
@@ -133,6 +138,13 @@
               <option value="mono">Mono</option>
             </select>
           </div>
+
+          <!-- Mature content global toggle -->
+          <label class="switch" title="Show posts & replies that include slurs/explicit/violent/extremist terms">
+            <input type="checkbox" id="matureToggle" />
+            Show mature
+          </label>
+
           <span class="pill" id="status">connecting…</span>
         </div>
       </div>
@@ -145,11 +157,10 @@
       <div class="row">
         <button class="btn" id="postBtn" aria-label="Post message">Post</button>
         <div class="meta">
-  <span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s • you are
-  <span id="meFlair"></span>
-  <button class="btn mini" id="rerollBtn" type="button" title="Get a new anonymous flair">Reroll</button>
-</div>
-
+          <span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s • you are
+          <span id="meFlair"></span>
+          <button class="btn mini" id="rerollBtn" type="button" title="Get a new anonymous flair">Reroll</button>
+        </div>
       </div>
       <div class="notice">
         Be civil. Don’t post illegal, harmful, or personal data. Everything here is public and may be removed.
@@ -176,8 +187,9 @@
   <div class="toast" id="toast"></div>
 
   <!-- Supabase client -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
   <script>
+    'use strict';
     // --- Supabase keys (yours) ---
     const SUPABASE_URL = "https://hqwerxoapoczigetylfj.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhxd2VyeG9hcG9jemlnZXR5bGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNTIyNTQsImV4cCI6MjA3MTgyODI1NH0.-MGwuD5NzuHo23GrYD-GsSdeGKoVh_ggDGqp0v7eXoo";
@@ -196,69 +208,126 @@
     const themeSel = document.getElementById('theme');
     const meFlairEl= document.getElementById('meFlair');
     const toastEl  = document.getElementById('toast');
+    const matureToggle = document.getElementById('matureToggle');
 
     // --- Settings/state ---
     const COOLDOWN_SEC = 15;
     const PAGE_SIZE = 30;
     let SOURCE = 'posts_public'; // will auto-fallback to 'posts' if missing
     let HAS_FLAIR = true;        // detect if flair column exists
+    let HAS_MATURE = true;       // detect if mature column exists
     let REACTIONS_AVAILABLE = true; // detect if reactions table exists
     let nextCursor = null; // { created_at, id }
     const seen = new Set(); // post ids rendered
 
-    // --- Bad-words cache (from DB) ---
+    // --- Mature visibility preference ---
+    let SHOW_MATURE = (localStorage.getItem('threadless_show_mature') === '1');
+    matureToggle.checked = SHOW_MATURE;
+    matureToggle.addEventListener('change', ()=>{
+      SHOW_MATURE = matureToggle.checked;
+      localStorage.setItem('threadless_show_mature', SHOW_MATURE ? '1' : '0');
+      reloadFeed();
+    });
+
+    // --- Security/normalization helpers ---
+    const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
+    const DEOB = {'1':'i','!':'i','|':'i','@':'a','4':'a','$':'s','3':'e','0':'o','7':'t','5':'s','8':'b'};
+    const deobfuscate = s => s.replace(/[1!|@4$30 75 8]/g, ch => DEOB[ch] ?? ch);
+    const canonical = s => deobfuscate((s||'').normalize('NFKC').replace(ZERO_WIDTH,'')).toLowerCase().trim();
+
+    // --- Bad-words cache (from DB) + expanded fallback ---
     let BAD_WORDS = []; // [{word, category}, ...]
+    let BAD_RE = null;
+
+    const FALLBACK_BAD = [
+      // slurs (context: moderation filter)
+      {word:'nigger', category:'slur'},
+      {word:'faggot', category:'slur'},
+      {word:'retard', category:'slur'},
+      {word:'chink', category:'slur'},
+      {word:'spic', category:'slur'},
+      {word:'kike', category:'slur'},
+      {word:'tranny', category:'slur'},
+      {word:'gook', category:'slur'},
+      // extremism
+      {word:'nazi', category:'extremist'},
+      {word:'neo-nazi', category:'extremist'},
+      {word:'heil hitler', category:'extremist'},
+      {word:'sieg heil', category:'extremist'},
+      {word:'third reich', category:'extremist'},
+      {word:'swastika', category:'extremist'},
+      {word:'kkk', category:'extremist'},
+      {word:'white power', category:'extremist'},
+      {word:'1488', category:'extremist'},
+      {word:'14 words', category:'extremist'},
+      {word:'blood and soil', category:'extremist'},
+      // threats/violence/self-harm
+      {word:'kill yourself', category:'self-harm'},
+      {word:'kys', category:'self-harm'},
+      {word:'suicide', category:'self-harm'},
+      {word:'dox', category:'threat'},
+      {word:'swat', category:'threat'},
+      {word:'lynch', category:'violence'},
+      // explicit/sexual
+      {word:'rape', category:'harm'},
+      {word:'cum', category:'sexual'},
+      {word:'cock', category:'sexual'},
+      {word:'pussy', category:'sexual'},
+      {word:'cunt', category:'sexual'},
+      {word:'slut', category:'sexual'},
+      {word:'whore', category:'sexual'},
+      {word:'dick', category:'sexual'},
+      // profanity (kept short; adjust to taste)
+      {word:'fuck', category:'profanity'},
+      {word:'shit', category:'profanity'},
+      {word:'asshole', category:'profanity'},
+      {word:'bastard', category:'profanity'},
+    ];
+
+    const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    function rebuildBadRegex(){
+      const words = [...new Set((BAD_WORDS||[]).map(x => (x.word||'').trim()).filter(Boolean))]
+        .map(escapeRegExp)
+        .sort((a,b)=>b.length-a.length);
+      BAD_RE = words.length ? new RegExp("\\b(?:"+words.join("|")+")\\b","i") : null;
+    }
     async function loadBadWords(){
       const { data, error } = await sb.from('bad_words').select('word, category');
-      if (!error && data){ BAD_WORDS = data; }
-      else {
-        // Fallback minimal client list
-        BAD_WORDS = [
-          {word:'kys', category:'self-harm'},
-          {word:'kill yourself', category:'self-harm'},
-          {word:'suicide', category:'self-harm'},
-          {word:'rape', category:'harm'},
-          {word:'dox', category:'threat'},
-          {word:'swat', category:'threat'},
-          {word:'retard', category:'slur'},
-          {word:'faggot', category:'slur'},
-          {word:'nigger', category:'slur'},
-        ];
+      if (!error && data){
+        // merge with fallback (dedupe by word)
+        const seen = new Set();
+        BAD_WORDS = [...data, ...FALLBACK_BAD].filter(({word})=>{
+          const w = (word||'').toLowerCase();
+          if (seen.has(w)) return false; seen.add(w); return true;
+        });
+      } else {
+        BAD_WORDS = FALLBACK_BAD;
       }
+      rebuildBadRegex();
     }
-    function needsNudge(text){
-      const t = text.toLowerCase();
-      return BAD_WORDS.some(({word}) => t.includes(word));
-    }
+    const matchesBadWord = t => BAD_RE ? BAD_RE.test(canonical(t)) : false;
+    const needsNudge = text => matchesBadWord(text);
+    const isMatureText = text => matchesBadWord(text);
 
     // --- Flair/session tag ---
-// Always generate a fresh, anonymous flair on page load.
-// (We deliberately ignore any stored value to maximize anonymity.)
-function makeTag(){
-  const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie','Crimson','Sable','Verdant','Golden','Nimbus','Boreal','Saffron','Umber'];
-  const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren','Wolf','Heron','Bison','Ocelot','Orca','Tern','Ibex','Dingo'];
-  const a = adjectives[Math.floor(Math.random()*adjectives.length)];
-  const b = animals[Math.floor(Math.random()*animals.length)];
-  const num = Math.floor(Math.random()*89)+11; // 11..99
-  return `${a}-${b}·${num}`;
-}
-
-// Global, mutable session flair (used for posts, replies, reports, reactions)
-let SESSION_TAG = makeTag();
-meFlairEl.textContent = SESSION_TAG;
-
-// Optional: store to sessionStorage (clears on tab close) for UX if you navigate within site
-try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
-
-function rerollTag(){
-  SESSION_TAG = makeTag();
-  meFlairEl.textContent = SESSION_TAG;
-  try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
-  toast('New anon flair!');
-}
-
-// Hook up the button
-document.getElementById('rerollBtn').addEventListener('click', rerollTag);
+    function makeTag(){
+      const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie','Crimson','Sable','Verdant','Golden','Nimbus','Boreal','Saffron','Umber'];
+      const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren','Wolf','Heron','Bison','Ocelot','Orca','Tern','Ibex','Dingo'];
+      const a = adjectives[Math.floor(Math.random()*adjectives.length)];
+      const b = animals[Math.floor(Math.random()*animals.length)];
+      const num = Math.floor(Math.random()*89)+11; // 11..99
+      return `${a}-${b}·${num}`;
+    }
+    let SESSION_TAG = makeTag();
+    meFlairEl.textContent = SESSION_TAG;
+    try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
+    function rerollTag(){
+      SESSION_TAG = makeTag();
+      meFlairEl.textContent = SESSION_TAG;
+      try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
+      toast('New anon flair!');
+    }
+    document.getElementById('rerollBtn').addEventListener('click', rerollTag);
 
     // --- Theme handling ---
     const savedTheme = localStorage.getItem('threadless_theme') || 'forest';
@@ -274,9 +343,16 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
     const nowSec = ()=>Math.floor(Date.now()/1000);
     function getCooldownLeft(){ const last = Number(localStorage.getItem('lastPostTs')||'0'); return Math.max(0,(last+COOLDOWN_SEC)-nowSec()); }
     function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
-    function sanitize(s){ return s.trim(); }
+    function sanitize(s){ return (s||'').trim(); }
     function toast(msg){ toastEl.textContent = msg; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none', 1600); }
     function showStatus(msg){ statusEl.textContent = msg; }
+
+    // --- Visibility helpers for mature content ---
+    const rowIsMature = row => {
+      if (HAS_MATURE && typeof row.mature === 'boolean') return row.mature;
+      return isMatureText(row.content || '');
+    };
+    function shouldRender(row){ return SHOW_MATURE || !rowIsMature(row); }
 
     // --- Render: reactions/report row
     function emojiRow(post){
@@ -348,8 +424,9 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       return el;
     }
 
-    // --- Post renderer (no per-post replies load here to avoid races)
+    // --- Post renderer
     function renderPost(row){
+      if (!shouldRender(row)) return null;
       if (seen.has(row.id)) return null;
       seen.add(row.id);
       const el = document.createElement('div');
@@ -401,44 +478,56 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       for (const [post_id, rows] of groups.entries()) {
         const wrap = document.getElementById(`replies_${post_id}`);
         if (!wrap) continue;
-        // remove old rendered replies (keep composer = last child)
         [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
         for (const r of rows) {
-          wrap.insertBefore(renderReply(r), wrap.lastChild);
+          if (SHOW_MATURE || !rowIsMature(r)) {
+            wrap.insertBefore(renderReply(r), wrap.lastChild);
+          }
         }
       }
     }
     async function loadRepliesForPosts(postIds){
       if (!postIds.length) return;
-      const { data, error } = await sb.from('replies')
-        .select('id, post_id, content, created_at, flair')
+      let q = sb.from('replies')
+        .select(HAS_MATURE ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
         .in('post_id', postIds)
         .order('post_id', { ascending: true })
         .order('created_at', { ascending: true });
+      if (HAS_MATURE && !SHOW_MATURE) q = q.eq('mature', false);
+      const { data, error, status } = await q;
+      if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
+        if (HAS_MATURE){ HAS_MATURE = false; return loadRepliesForPosts(postIds); }
+      }
       if (error) { console.warn('replies bulk load error', error); return; }
       const grouped = groupBy(data || [], 'post_id');
       renderRepliesBatch(grouped);
     }
-    // Single-post wrapper (used after sending & for realtime safety)
     async function loadReplies(post_id){
-      const { data, error } = await sb.from('replies')
-        .select('id, post_id, content, created_at, flair')
+      let q = sb.from('replies')
+        .select(HAS_MATURE ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
         .eq('post_id', post_id)
         .order('created_at', { ascending: true })
         .limit(200);
+      if (HAS_MATURE && !SHOW_MATURE) q = q.eq('mature', false);
+      const { data, error, status } = await q;
+      if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
+        if (HAS_MATURE){ HAS_MATURE = false; return loadReplies(post_id); }
+      }
       if (error){ console.warn('replies load error', error); return; }
       const m = new Map([[post_id, data || []]]);
       renderRepliesBatch(m);
     }
 
-    // --- Pagination (with source + flair fallback)
+    // --- Pagination (with source + flair + mature fallback)
     async function fetchPage(cursor){
-      const fields = HAS_FLAIR ? 'id, content, created_at, flair' : 'id, content, created_at';
+      const baseFields = 'id, content, created_at' + (HAS_FLAIR ? ', flair' : '') + (HAS_MATURE ? ', mature' : '');
       let q = sb.from(SOURCE)
-        .select(fields)
+        .select(baseFields)
         .order('created_at', { ascending:false })
         .order('id', { ascending:false })
         .limit(PAGE_SIZE);
+
+      if (!SHOW_MATURE && HAS_MATURE) q = q.eq('mature', false);
 
       if (cursor){
         const cts = encodeURIComponent(cursor.created_at);
@@ -453,8 +542,10 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
         SOURCE = 'posts'; showStatus('fallback'); return fetchPage(cursor);
       }
 
-      if (status === 400 || (error && (error.code === '42703' || /flair.*does not exist/i.test(error.message||'')))){
-        if (HAS_FLAIR){ HAS_FLAIR = false; return fetchPage(cursor); }
+      if (status === 400 || (error && (error.code === '42703'))){
+        // detect missing columns
+        if (/flair.*does not exist/i.test(error.message||'')) { if (HAS_FLAIR){ HAS_FLAIR = false; return fetchPage(cursor);} }
+        if (/mature.*does not exist/i.test(error.message||'')) { if (HAS_MATURE){ HAS_MATURE = false; return fetchPage(cursor);} }
       }
 
       if (error){
@@ -463,9 +554,9 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
         return { rows:[], hasMore:false, newCursor:null };
       }
 
-      const rows = data || [];
-      const last = rows[rows.length - 1] || null;
-      const hasMore = rows.length === PAGE_SIZE;
+      const rows = (data || []).filter(r => shouldRender(r)); // client-side filter if no mature column
+      const last = (data || [])[ (data||[]).length - 1 ] || null;
+      const hasMore = (data||[]).length === PAGE_SIZE;
       return { rows, hasMore, newCursor: last ? { created_at: last.created_at, id: last.id } : null };
     }
 
@@ -474,7 +565,6 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       feedEl.innerHTML = '';
       appendRows(rows);
       await hydrateReactions(rows.map(r=>r.id));
-      // bulk load replies for visible posts:
       await loadRepliesForPosts(rows.map(r => r.id));
       nextCursor = newCursor;
       updatePager(hasMore);
@@ -496,19 +586,27 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       const { rows, hasMore, newCursor } = await fetchPage(nextCursor);
       appendRows(rows);
       await hydrateReactions(rows.map(r=>r.id));
-      // bulk load replies for the newly appended posts:
       await loadRepliesForPosts(rows.map(r => r.id));
       nextCursor = newCursor;
       updatePager(hasMore);
       setLoading(false);
     }
 
+    // --- Feed reload on toggle change
+    async function reloadFeed(){
+      seen.clear();
+      nextCursor = null;
+      feedEl.innerHTML = '';
+      await initialLoad();
+    }
+
     // --- Reactions
     async function hydrateReactions(postIds){
-      if (!REACTIONS_AVAILABLE || !postIds.length) return;
+      const visible = postIds.filter(Boolean);
+      if (!REACTIONS_AVAILABLE || !visible.length) return;
       const { data, error, status } = await sb.from('reactions')
         .select('post_id, emoji')
-        .in('post_id', postIds);
+        .in('post_id', visible);
 
       if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
         REACTIONS_AVAILABLE = false;
@@ -519,7 +617,7 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
 
       const agg = {};
       for (const r of (data||[])){ const k = `${r.post_id}:${r.emoji}`; agg[k] = (agg[k]||0)+1; }
-      for (const pid of postIds){
+      for (const pid of visible){
         ['up','down','like','lol','heart'].forEach(em=>{
           const el = document.getElementById(`c_${pid}_${em}`);
           if (el) el.textContent = agg[`${pid}:${em}`] || 0;
@@ -568,20 +666,28 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       }
     }
 
-    // --- Replies: data ops (single send)
+    // --- Replies: send
     async function sendReply(post_id, textarea){
       const content = sanitize(textarea.value);
       if (!content) return;
       if (needsNudge(content)){
-        const ok = confirm('This reply may be uncivil. Are you sure you want to post it?');
+        const ok = confirm('This reply may be uncivil or mature. Are you sure you want to post it?');
         if (!ok) return;
       }
       textarea.disabled = true;
       try{
-        const { error } = await sb.from('replies').insert({ post_id, content, flair: SESSION_TAG });
-        if (error) throw error;
+        let payload = { post_id, content, flair: SESSION_TAG };
+        if (HAS_MATURE) payload.mature = isMatureText(content);
+        const r = await sb.from('replies').insert(payload);
+        if (r.error){
+          if (r.error.code === '42703' || /mature.*does not exist/i.test(r.error.message||'')) {
+            HAS_MATURE = false;
+            await sb.from('replies').insert({ post_id, content, flair: SESSION_TAG });
+          } else {
+            throw r.error;
+          }
+        }
         textarea.value = '';
-        // Safety fetch in case realtime lags
         loadReplies(post_id);
       }catch(e){
         alert('Reply failed: ' + (e?.message || 'see console'));
@@ -630,12 +736,15 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
     postBtn.addEventListener('click', post);
 
     async function insertPost(payload){
-      if (HAS_FLAIR){
+      if (HAS_FLAIR || HAS_MATURE){
         const r1 = await sb.from('posts').insert(payload);
         if (!r1.error) return r1;
-        if (r1.error && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))){
-          HAS_FLAIR = false;
-        } else { return r1; }
+        if (r1.error){
+          if (HAS_FLAIR && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))) HAS_FLAIR = false;
+          if (HAS_MATURE && (r1.error.code === '42703' || /mature.*does not exist/i.test(r1.error.message||''))) HAS_MATURE = false;
+          if (HAS_FLAIR || HAS_MATURE) return insertPost({ content: payload.content }); // retry lean
+          return r1;
+        }
       }
       return sb.from('posts').insert({ content: payload.content });
     }
@@ -647,13 +756,15 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       if (!content) return;
 
       if (needsNudge(content)){
-        const ok = confirm('This post may be uncivil. Are you sure you want to post it?');
+        const ok = confirm('This post may be uncivil or mature. Are you sure you want to post it?');
         if (!ok) return;
       }
 
       postBtn.disabled = true;
       try{
-        const { error } = await insertPost({ content, flair: SESSION_TAG });
+        let payload = { content, flair: SESSION_TAG };
+        if (HAS_MATURE) payload.mature = isMatureText(content);
+        const { error } = await insertPost(payload);
         if (error) throw error;
         textEl.value = '';
         countEl.textContent = '0';
@@ -670,8 +781,10 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
     async function subscribeRealtime(){
       sb.channel('threadless_posts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
-          const node = renderPost(payload.new);
-          if (node) { feedEl.prepend(node); hydrateReactions([payload.new.id]); }
+          const row = payload.new;
+          if (!shouldRender(row)) return;
+          const node = renderPost(row);
+          if (node) { feedEl.prepend(node); hydrateReactions([row.id]); }
         })
         .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
           const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
@@ -703,11 +816,12 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
       sb.channel('threadless_replies')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
           const r = payload.new;
-          const wrap = document.getElementById(`replies_${r.post_id}`);
-          if (wrap){
-            const node = renderReply(r);
-            // Insert before composer (last child is composer row)
-            wrap.insertBefore(node, wrap.lastChild);
+          if (SHOW_MATURE || !rowIsMature(r)){
+            const wrap = document.getElementById(`replies_${r.post_id}`);
+            if (wrap){
+              const node = renderReply(r);
+              wrap.insertBefore(node, wrap.lastChild);
+            }
           }
         })
         .subscribe();
@@ -738,5 +852,3 @@ document.getElementById('rerollBtn').addEventListener('click', rerollTag);
   </script>
 </body>
 </html>
-
-
