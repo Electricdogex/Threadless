@@ -435,23 +435,30 @@
 
     // --- Reports: insert; hide locally if threshold reached in source ---
     async function report(post_id){
-      if (!confirm('Report this post for moderation?')) return;
-      const { error } = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
-      if (error){
-        alert('Already reported or failed.');
-        console.warn('report error', error);
-        return;
-      }
-      // Check visibility via current SOURCE; if missing from SOURCE, remove
-      const check = await sb.from(SOURCE).select('id').eq('id', post_id).maybeSingle();
-      if (!check.data){
-        const node = document.querySelector(`.post[data-id="${post_id}"]`);
-        if (node) node.remove();
-        toast('Post hidden by community');
-      } else {
-        toast('Reported');
-      }
-    }
+  if (!confirm('Report this post for moderation?')) return;
+
+  const ins = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
+  if (ins.error){
+    alert('Already reported or failed.');
+    console.warn('report error', ins.error);
+    return;
+  }
+
+  // Count reports and hide if threshold reached
+  const cnt = await sb.from('reports')
+    .select('post_id', { count: 'exact', head: true })
+    .eq('post_id', post_id);
+
+  const total = cnt.count ?? 0;
+  if (total >= 3){
+    const node = document.querySelector(`.post[data-id="${post_id}"]`);
+    if (node) node.remove();
+    toast('Post hidden by community');
+  } else {
+    toast('Reported');
+  }
+}
+
 
     // --- Prompt of the day (uses current SOURCE for presence check) ---
     const PROMPTS = [
@@ -587,3 +594,4 @@
   </script>
 </body>
 </html>
+
