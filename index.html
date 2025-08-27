@@ -1,66 +1,148 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="forest">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Threadless · ALPHA</title>
 
-<!-- Inline favicon (green/orange) -->
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3rect width='64' height='64' rx='12' fill='%230e1613'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%23ff8b3d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- Favicon (green/orange) -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1613'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%23ff8b3d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
 
 <style>
+  /* === Themes === */
   :root{
     --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27;
     --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d;
+    --warn:#ffd08f; --bad:#ff8c8c;
   }
+  [data-theme="forest"]{
+    --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27;
+    --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d;
+    --warn:#ffd08f;
+  }
+  [data-theme="sunset"]{
+    --bg:#160f12; --card:#22161b; --ink:#ffeef3; --muted:#c5a7b3; --line:#2d1e25;
+    --accent:#ff6b6b; --accent-2:#ffb86b; --accent-2-ink:#2b130f;
+    --warn:#ffe0b5;
+  }
+  [data-theme="midnight"]{
+    --bg:#0d0f19; --card:#121427; --ink:#e9ebff; --muted:#a9b0d4; --line:#1a1d36;
+    --accent:#8ab4ff; --accent-2:#6ae6c1; --accent-2-ink:#021410;
+    --warn:#ffd9a3;
+  }
+
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
     margin:0;
     background:
-      radial-gradient(1200px 600px at 20% -10%, #15231d 0%, transparent 60%),
-      radial-gradient(1000px 800px at 120% -20%, #1a2b23 0%, transparent 55%),
+      radial-gradient(1200px 600px at 20% -10%, color-mix(in srgb, var(--card) 60%, transparent) 0%, transparent 60%),
+      radial-gradient(1000px 800px at 120% -20%, color-mix(in srgb, var(--card) 60%, transparent) 0%, transparent 55%),
       var(--bg);
     color:var(--ink);
     font:16px/1.5 system-ui, Segoe UI, Inter, Arial, sans-serif;
   }
-  header{position:sticky; top:0; z-index:3; background:linear-gradient(180deg, rgba(18,32,25,.8), rgba(18,32,25,0)); backdrop-filter: blur(6px); border-bottom:1px solid var(--line);}
+
+  header{
+    position:sticky; top:0; z-index:3;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--card) 85%, transparent), transparent);
+    backdrop-filter: blur(6px);
+    border-bottom:1px solid var(--line);
+  }
+
   .wrap{max-width:860px;margin:0 auto;padding:16px}
   h1{margin:0 0 4px; font-size:22px; letter-spacing:.2px}
   .sub{color:var(--muted);font-size:13px}
   .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px}
   .brand{display:flex; align-items:center; gap:12px}
-  .logo{width:32px;height:32px;border-radius:10px;background:#0e1613;border:1px solid var(--line);display:grid; place-items:center}
-  .logo::after{content:''; display:block; width:24px; height:6px; border-radius:6px; background:var(--accent); box-shadow:0 12px 0 var(--accent), 0 24px 0 var(--accent); transform:translateY(-6px)}
-  .alpha{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--accent-2-ink); background:linear-gradient(180deg, #27b278, #198657); border:1px solid #136d46; border-radius:999px; padding:6px 10px; box-shadow:0 4px 14px rgba(31,157,104,.25), inset 0 1px 0 rgba(255,255,255,.05)}
-  .pill{font-size:12px;color:var(--muted)}
-  .composer{margin:16px 0;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:16px}
-  textarea{width:100%;min-height:110px;background:#0b1410;color:var(--ink);border:1px solid #243b2f;border-radius:12px;padding:12px;resize:vertical;outline:none}
-  textarea:focus{border-color:#2b5a47; box-shadow:0 0 0 4px rgba(31,157,104,.15)}
-  .row{display:flex;gap:12px;align-items:center;margin-top:10px}
-  .btn{border:0;border-radius:12px;padding:10px 14px;background:linear-gradient(180deg,var(--accent),#e5752d);color:#27160a;font-weight:800;cursor:pointer}
-  .btn[disabled]{opacity:.55;cursor:not-allowed}
-  .meta{margin-left:auto;color:var(--muted);font-size:12px}
-  .feed{display:flex;flex-direction:column;gap:12px;margin:20px 0}
-  .post{padding:14px 14px 10px;background:linear-gradient(180deg, rgba(255,139,61,.05), transparent 35%), var(--card);border:1px solid var(--line);border-radius:16px}
-  .content{white-space:pre-wrap;word-wrap:break-word}
-  .time{margin-top:8px;color:var(--muted);font-size:12px}
-  .notice{margin-top:8px;color:#ffd08f;font-size:12px}
-  a{color:var(--accent);text-decoration:none}
-
-  /* Load more area */
-  .pager{display:flex;justify-content:center;margin:20px 0}
-  .pager .more{
-    border:1px solid var(--line);
-    background:linear-gradient(180deg,#1b2a24,#141f1a);
-    color:var(--ink);
-    padding:10px 14px; border-radius:12px; cursor:pointer;
+  .logo{
+    width:32px;height:32px;border-radius:10px;background:var(--bg);border:1px solid var(--line);
+    display:grid; place-items:center;
   }
-  .pager .more[disabled]{opacity:.6;cursor:not-allowed}
-  .pager .end{color:var(--muted);font-size:12px;padding:8px 0}
+  .logo::after{
+    content:''; display:block; width:24px; height:6px; border-radius:6px;
+    background:var(--accent);
+    box-shadow:0 12px 0 var(--accent), 0 24px 0 var(--accent);
+    transform:translateY(-6px);
+  }
+
+  .alpha{
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px;
+    color:var(--accent-2-ink);
+    background:linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 75%, #0a0 0%));
+    border:1px solid color-mix(in srgb, var(--accent-2) 65%, black);
+    border-radius:999px; padding:6px 10px;
+    box-shadow:0 4px 14px color-mix(in srgb, var(--accent-2) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .pill{font-size:12px;color:var(--muted)}
+
+  .theme-switch{
+    display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px;
+  }
+  .theme-select{
+    appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink);
+    border-radius:10px; padding:6px 10px; cursor:pointer;
+  }
+
+  .composer{
+    margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.2);
+  }
+  textarea{
+    width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink);
+    border:1px solid color-mix(in srgb, var(--line) 75%, black 25%);
+    border-radius:12px; padding:12px; resize:vertical; outline:none;
+  }
+  textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent); }
+  .row{display:flex; gap:12px; align-items:center; margin-top:10px}
+
+  .btn{
+    border:0; border-radius:12px; padding:10px 14px;
+    background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%));
+    color:#28150a; font-weight:800; cursor:pointer;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.15);
+  }
+  .btn[disabled]{opacity:.55; cursor:not-allowed}
+  .meta{margin-left:auto; color:var(--muted); font-size:12px}
+
+  .feed{display:flex; flex-direction:column; gap:12px; margin:20px 0}
+  .post{
+    padding:14px 14px 10px;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 35%), var(--card);
+    border:1px solid var(--line); border-radius:16px;
+  }
+  .headerline{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; margin-bottom:6px}
+  .flair{font-weight:700; color:var(--ink)}
+  .content{white-space:pre-wrap; word-wrap:break-word}
+  .time{margin-top:8px; color:var(--muted); font-size:12px}
+
+  .actions{
+    display:flex; align-items:center; gap:10px; margin-top:10px; user-select:none;
+    color:var(--muted); font-size:13px;
+  }
+  .emoji{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:color-mix(in srgb, var(--bg) 92%, black 8%); cursor:pointer}
+  .emoji[disabled]{opacity:.5; cursor:not-allowed}
+  .count{color:var(--ink)}
+  .report{margin-left:auto; cursor:pointer; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:6px 10px; background:transparent}
+  .report:hover{color:var(--ink); border-color:var(--accent)}
+
+  .notice{margin-top:8px; color:var(--warn); font-size:12px}
+  a{color:var(--accent); text-decoration:none}
+
+  .pager{display:flex; justify-content:center; margin:16px 0 32px}
+  .pager .load-more{
+    display:inline-flex; align-items:center; gap:8px;
+    border:1px solid var(--line); border-radius:999px; padding:10px 16px;
+    background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); cursor:pointer;
+  }
+  .pager .load-more[disabled]{opacity:.6; cursor:not-allowed}
+  .spinner{width:14px; height:14px; border:2px solid color-mix(in srgb, var(--accent-2) 60%, transparent); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
 
   footer{color:var(--muted); font-size:12px; margin:36px 0; text-align:center}
-  footer .copyright{margin-top:8px;color:var(--muted);font-size:11px}
+  footer .copyright{margin-top:8px; color:var(--muted); font-size:11px}
+
+  .toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--line); color:var(--ink); padding:10px 14px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.25); font-size:13px; display:none}
 </style>
 </head>
 <body>
@@ -74,8 +156,16 @@
             <div class="sub">A single, continuous anonymous board · <strong>ALPHA PROTOTYPE</strong></div>
           </div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex; align-items:center; gap:10px;">
           <span class="alpha">Alpha Prototype</span>
+          <div class="theme-switch">
+            Theme:
+            <select id="theme" class="theme-select" aria-label="Select theme">
+              <option value="forest">Forest</option>
+              <option value="sunset">Sunset</option>
+              <option value="midnight">Midnight</option>
+            </select>
+          </div>
           <span class="pill" id="status">connecting…</span>
         </div>
       </div>
@@ -87,16 +177,19 @@
       <textarea id="text" maxlength="1000" placeholder="Share a thought… (Enter to post, Shift+Enter = newline)"></textarea>
       <div class="row">
         <button class="btn" id="postBtn" aria-label="Post message">Post</button>
-        <div class="meta"><span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s</div>
+        <div class="meta"><span id="count">0</span>/1000 • cooldown: <span id="cool">0</span>s • you are <span id="meFlair"></span></div>
       </div>
       <div class="notice">Be civil. Don’t post illegal or harmful content. Everything here is public. This is an <strong>alpha</strong>—content may be lost.</div>
     </section>
 
     <section class="feed" id="feed" aria-live="polite"></section>
 
-    <!-- Pagination control -->
-    <div class="pager" id="pager">
-      <button class="more" id="loadMoreBtn">Load more</button>
+    <!-- Pagination -->
+    <div class="pager">
+      <button class="load-more" id="loadMoreBtn">
+        <span class="spinner" id="moreSpin" style="display:none"></span>
+        <span id="moreLabel">Load more</span>
+      </button>
     </div>
 
     <footer>
@@ -105,14 +198,14 @@
     </footer>
   </main>
 
+  <div class="toast" id="toast"></div>
+
   <!-- Supabase client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     // --- Supabase keys (yours) ---
     const SUPABASE_URL = "https://hqwerxoapoczigetylfj.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhxd2VyeG9hcG9jemlnZXR5bGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNTIyNTQsImV4cCI6MjA3MTgyODI1NH0.-MGwuD5NzuHo23GrYD-GsSdeGKoVh_ggDGqp0v7eXoo";
-
-    // --- Client ---
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // --- UI refs ---
@@ -123,145 +216,355 @@
     const countEl  = document.getElementById('count');
     const coolEl   = document.getElementById('cool');
     const loadMoreBtn = document.getElementById('loadMoreBtn');
+    const moreSpin = document.getElementById('moreSpin');
+    const moreLabel = document.getElementById('moreLabel');
+    const themeSel = document.getElementById('theme');
+    const meFlairEl= document.getElementById('meFlair');
+    const toastEl  = document.getElementById('toast');
 
-    // --- Settings ---
+    // --- Settings/state ---
     const COOLDOWN_SEC = 15;
-    const PAGE_SIZE = 30;       // number of posts per page
-    const MAX_DOM_POSTS = 200;  // keep DOM light
+    const PAGE_SIZE = 30;
+    let nextCursor = null; // { created_at, id }
+    const seen = new Set(); // post ids rendered
 
-    // --- State ---
-    let oldestCursor = null;  // ISO string of the oldest loaded post's created_at
-    let loadingPage = false;
-    let reachedEnd = false;
+    // --- Flair/session tag ---
+    function loadOrCreateSessionTag(){
+      const existing = localStorage.getItem('threadless_session_tag');
+      if (existing) return existing;
+      const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie'];
+      const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren'];
+      const a = adjectives[Math.floor(Math.random()*adjectives.length)];
+      const b = animals[Math.floor(Math.random()*animals.length)];
+      const num = Math.floor(Math.random()*89)+11; // 11..99
+      const tag = `${a}-${b}·${num}`;
+      localStorage.setItem('threadless_session_tag', tag);
+      return tag;
+    }
+    const SESSION_TAG = loadOrCreateSessionTag();
+    meFlairEl.textContent = SESSION_TAG;
+
+    // --- Theme handling ---
+    const savedTheme = localStorage.getItem('threadless_theme') || 'forest';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    themeSel.value = savedTheme;
+    themeSel.addEventListener('change', ()=>{
+      document.documentElement.setAttribute('data-theme', themeSel.value);
+      localStorage.setItem('threadless_theme', themeSel.value);
+    });
 
     // --- Helpers ---
     const sleep = ms=>new Promise(r=>setTimeout(r,ms));
     const nowSec = ()=>Math.floor(Date.now()/1000);
     function getCooldownLeft(){ const last = Number(localStorage.getItem('lastPostTs')||'0'); return Math.max(0,(last+COOLDOWN_SEC)-nowSec()); }
     function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
-    function sanitize(s){ return s.replace(/^\s+|\s+$/g,''); }
+    function sanitize(s){ return s.trim(); }
+    function toast(msg){ toastEl.textContent = msg; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none', 1600); }
+
+    // --- Civility nudges (soft confirm) ---
+    const FLAGGED = [
+      // keep this lightweight; you can expand server-side later
+      'kill yourself','kys','slur','retard','faggot','nigger','gas yourself','die',
+      'dox','d0x','swat','suicide','rape'
+    ];
+    function needsNudge(text){
+      const t = text.toLowerCase();
+      return FLAGGED.some(w => t.includes(w));
+    }
+
+    // --- Renderers ---
+    function emojiRow(post){
+      // Create reaction buttons with counts; ids map to emoji keys
+      const wrap = document.createElement('div');
+      wrap.className = 'actions';
+      const emojis = [
+        {key:'up',    label:'🔼'},
+        {key:'down',  label:'🔽'},
+        {key:'like',  label:'👍'},
+        {key:'lol',   label:'😂'},
+        {key:'heart', label:'❤️'},
+      ];
+      emojis.forEach(({key,label})=>{
+        const btn = document.createElement('button');
+        btn.className = 'emoji';
+        btn.dataset.key = key;
+        btn.innerHTML = `<span>${label}</span> <span class="count" id="c_${post.id}_${key}">0</span>`;
+        btn.addEventListener('click', ()=>react(post.id, key, btn));
+        wrap.appendChild(btn);
+      });
+      const reportBtn = document.createElement('button');
+      reportBtn.className = 'report';
+      reportBtn.textContent = 'Report';
+      reportBtn.title = 'Report this post';
+      reportBtn.addEventListener('click', ()=>report(post.id));
+      wrap.appendChild(reportBtn);
+      return wrap;
+    }
 
     function renderPost(row){
+      if (seen.has(row.id)) return null;
+      seen.add(row.id);
       const el = document.createElement('div');
       el.className = 'post';
-      el.innerHTML = `
-        <div class="content"></div>
-        <div class="time">${new Date(row.created_at).toLocaleString()} · anon</div>`;
-      el.querySelector('.content').textContent = row.content;
+      el.dataset.id = row.id;
+
+      const head = document.createElement('div');
+      head.className = 'headerline';
+      const flair = document.createElement('span');
+      flair.className = 'flair';
+      flair.textContent = row.flair || 'anon';
+      const dot = document.createElement('span');
+      dot.textContent = '·';
+      const time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = new Date(row.created_at).toLocaleString();
+      head.append(flair, dot, time);
+
+      const content = document.createElement('div');
+      content.className = 'content';
+      content.textContent = row.content;
+
+      el.append(head, content, emojiRow(row));
       return el;
     }
 
-    function trimDom(){
-      while (feedEl.children.length > MAX_DOM_POSTS) {
-        feedEl.removeChild(feedEl.lastElementChild);
+    function appendRows(rows, {prepend=false} = {}){
+      if (!rows.length) return;
+      const frag = document.createDocumentFragment();
+      for (const r of rows){
+        const node = renderPost(r);
+        if (node) frag.appendChild(node);
       }
+      if (prepend) feedEl.prepend(frag); else feedEl.appendChild(frag);
     }
 
-    // --- Load a page (keyset pagination by created_at) ---
-    async function loadPage(){
-      if (loadingPage || reachedEnd) return;
-      loadingPage = true;
-      loadMoreBtn.disabled = true;
-      loadMoreBtn.textContent = 'Loading…';
-
-      let query = sb.from('posts')
-        .select('*')
-        .order('created_at', { ascending: false })
+    // --- Pagination via keyset on posts_public view ---
+    async function fetchPage(cursor){
+      // Use the view so server auto-hides reported posts (>=3)
+      let q = sb.from('posts_public')
+        .select('id, content, created_at, flair')
+        .order('created_at', { ascending:false })
+        .order('id', { ascending:false })
         .limit(PAGE_SIZE);
 
-      if (oldestCursor) {
-        // fetch strictly older than the oldest we have
-        query = query.lt('created_at', oldestCursor);
+      if (cursor){
+        const cts = encodeURIComponent(cursor.created_at);
+        const cid = encodeURIComponent(cursor.id);
+        q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
       }
 
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('SELECT page error:', error);
-        statusEl.textContent = 'load error';
-        loadMoreBtn.disabled = false;
-        loadMoreBtn.textContent = 'Load more';
-        loadingPage = false;
-        return;
-      }
-
-      if (!data || data.length === 0) {
-        reachedEnd = true;
-        document.getElementById('pager').innerHTML = '<div class="end">No more posts</div>';
-        loadingPage = false;
-        return;
-      }
-
-      // Append older items (since results are newest→oldest)
-      data.forEach(row => feedEl.appendChild(renderPost(row)));
-      // Update cursor to the last (oldest) row's created_at
-      oldestCursor = data[data.length - 1].created_at;
-
-      trimDom();
-
-      loadMoreBtn.disabled = false;
-      loadMoreBtn.textContent = 'Load more';
-      loadingPage = false;
+      const { data, error } = await q;
+      if (error){ console.error('SELECT error:', error); statusEl.textContent = 'load error'; return { rows:[], hasMore:false }; }
+      const rows = data || [];
+      const last = rows[rows.length - 1] || null;
+      const hasMore = rows.length === PAGE_SIZE;
+      return { rows, hasMore, newCursor: last ? { created_at: last.created_at, id: last.id } : null };
     }
 
-    // --- Initial load (first page only) ---
     async function initialLoad(){
-      oldestCursor = null;
-      reachedEnd = false;
+      const { rows, hasMore, newCursor } = await fetchPage(null);
       feedEl.innerHTML = '';
-      await loadPage();
+      appendRows(rows);
+      await hydrateReactions(rows.map(r=>r.id));
+      nextCursor = newCursor;
+      updatePager(hasMore);
     }
 
-    // --- Realtime subscribe (prepend only) ---
-    async function subscribeRealtime(){
-      sb.channel('threadless')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, payload => {
-          feedEl.prepend(renderPost(payload.new));
-          trimDom();
-        })
-        .subscribe((state) => {
-          statusEl.textContent = (state === 'SUBSCRIBED') ? 'online' : state.toLowerCase();
+    function updatePager(hasMore){
+      loadMoreBtn.disabled = !hasMore;
+      moreLabel.textContent = hasMore ? 'Load more' : 'No more posts';
+    }
+    function setLoading(v){
+      loadMoreBtn.disabled = v;
+      moreSpin.style.display = v ? 'inline-block' : 'none';
+      moreLabel.textContent = v ? 'Loading…' : 'Load more';
+    }
+
+    async function loadMore(){
+      if (loadMoreBtn.disabled) return;
+      setLoading(true);
+      const { rows, hasMore, newCursor } = await fetchPage(nextCursor);
+      appendRows(rows);
+      await hydrateReactions(rows.map(r=>r.id));
+      nextCursor = newCursor;
+      updatePager(hasMore);
+      setLoading(false);
+    }
+
+    // --- Reactions: load & update counts ---
+    async function hydrateReactions(postIds){
+      if (!postIds.length) return;
+      const { data, error } = await sb.from('reactions')
+        .select('post_id, emoji')
+        .in('post_id', postIds);
+      if (error){ console.warn('reactions fetch error', error); return; }
+      const agg = {};
+      for (const r of data){
+        const k = `${r.post_id}:${r.emoji}`;
+        agg[k] = (agg[k] || 0) + 1;
+      }
+      for (const pid of postIds){
+        ['up','down','like','lol','heart'].forEach(em=>{
+          const el = document.getElementById(`c_${pid}_${em}`);
+          if (el) el.textContent = agg[`${pid}:${em}`] || 0;
         });
+      }
     }
 
-    // --- Posting ---
+    async function react(post_id, emoji, btn){
+      btn.disabled = true;
+      try{
+        const { error } = await sb.from('reactions').insert({ post_id, session_tag: SESSION_TAG, emoji });
+        if (error){
+          // duplicate (already reacted with that emoji) -> ignore silently
+          console.warn('reaction error', error.message || error.code);
+        }else{
+          const c = document.getElementById(`c_${post_id}_${emoji}`);
+          if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // --- Reports: insert; server view hides at 3+ ---
+    async function report(post_id){
+      if (!confirm('Report this post for moderation?')) return;
+      const { error } = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
+      if (error){
+        alert('Already reported or failed.');
+        console.warn('report error', error);
+        return;
+      }
+      // Check if it crossed threshold; if so, remove immediately
+      const { data, error: cntErr } = await sb.from('reports').select('post_id', { count: 'exact', head: true }).eq('post_id', post_id);
+      const total = cntErr ? 0 : (data === null ? 0 : data); // supabase-js v2 sets count on response.count; adjust:
+      // safer: re-query count:
+      const cRes = await sb.rpc('noop').catch(()=>({})); // placeholder if needed
+      // Instead, just refetch that post via the view; if missing -> remove
+      const check = await sb.from('posts_public').select('id').eq('id', post_id).maybeSingle();
+      if (!check.data){
+        const node = document.querySelector(`.post[data-id="${post_id}"]`);
+        if (node) node.remove();
+        toast('Post hidden by community');
+      } else {
+        toast('Reported');
+      }
+    }
+
+    // --- Prompt of the day (best-effort, client-side) ---
+    const PROMPTS = [
+      "What’s a tiny habit that changed your life?",
+      "Describe a place you miss that no longer exists.",
+      "What’s something you believed as a kid that’s still kind of true?",
+      "Teach us a one-minute skill.",
+      "What’s the best question to ask a stranger?"
+    ];
+    function todayKey(){ const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
+
+    async function ensurePromptOfDay(){
+      const key = localStorage.getItem('threadless_prompt_date');
+      const today = todayKey();
+      if (key === today) return; // this browser already tried today
+      // Check if a prompt exists today (simple heuristic: flair = 'PromptBot')
+      const start = new Date(); start.setHours(0,0,0,0);
+      const end = new Date(); end.setHours(23,59,59,999);
+      const { data, error } = await sb.from('posts_public')
+        .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
+        .eq('flair','PromptBot').limit(1);
+      if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
+      // Post one prompt
+      const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
+      await sb.from('posts').insert({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
+      localStorage.setItem('threadless_prompt_date', today);
+    }
+
+    // --- Civility nudge + Post flow ---
+    textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
+    textEl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }});
+    postBtn.addEventListener('click', post);
+
     async function post(){
       const left = getCooldownLeft();
       if (left>0){ coolEl.textContent = left; return; }
+
       const content = sanitize(textEl.value);
       if (!content) return;
 
+      if (needsNudge(content)){
+        const ok = confirm('This post may be uncivil. Are you sure you want to post it?');
+        if (!ok) return;
+      }
+
       postBtn.disabled = true;
       try{
-        const { error } = await sb.from('posts').insert({ content });
+        const { error } = await sb.from('posts').insert({ content, flair: SESSION_TAG });
         if (error) throw error;
-        textEl.value = '';
-        countEl.textContent = '0';
-        setJustPosted();
+        textEl.value = ''; countEl.textContent = '0'; setJustPosted();
+        toast('Posted!');
       }catch(e){
-        alert('Post failed (see console).');
-        console.error(e);
+        alert('Post failed (see console).'); console.error(e);
       }finally{
         postBtn.disabled = false;
       }
     }
 
-    // --- Events ---
-    textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
-    textEl.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }
+    // --- Realtime: new posts (they’ll all be < 3 reports on insert) ---
+    async function subscribeRealtime(){
+      // New posts
+      sb.channel('threadless_posts')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
+          const node = renderPost(payload.new);
+          if (node) {
+            feedEl.prepend(node);
+            hydrateReactions([payload.new.id]);
+          }
+        })
+        .subscribe((state)=>{ statusEl.textContent = (state === 'SUBSCRIBED') ? 'online' : state.toLowerCase(); });
+
+      // Reports: if a post crosses the threshold, it will disappear from the view.
+      sb.channel('threadless_reports')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
+          const pid = payload.new.post_id;
+          // re-check visibility via the view
+          const check = await sb.from('posts_public').select('id').eq('id', pid).maybeSingle();
+          if (!check.data){
+            const el = document.querySelector(`.post[data-id="${pid}"]`);
+            if (el) el.remove();
+          }
+        })
+        .subscribe();
+      
+      // Reactions: bump counts live
+      sb.channel('threadless_reacts')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
+          const { post_id, emoji } = payload.new;
+          const c = document.getElementById(`c_${post_id}_${emoji}`);
+          if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
+        })
+        .subscribe();
+    }
+
+    // --- Pager + scroll ---
+    loadMoreBtn.addEventListener('click', loadMore);
+    let autoLoading = false;
+    window.addEventListener('scroll', async ()=>{
+      if (autoLoading || loadMoreBtn.disabled) return;
+      const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
+      if (nearBottom){
+        autoLoading = true; await loadMore(); autoLoading = false;
+      }
     });
-    postBtn.addEventListener('click', post);
-    loadMoreBtn.addEventListener('click', loadPage);
 
     // --- Cooldown ticker ---
-    (async function tick(){ while(true){ coolEl.textContent = getCooldownLeft(); await sleep(500); }})();
+    (async function tick(){ while(true){ coolEl.textContent = getCooldownLeft(); await sleep(500);} })();
 
     // --- Boot ---
     (async function main(){
       statusEl.textContent = 'connecting…';
-      await initialLoad();      // first page
-      await subscribeRealtime(); // realtime for new posts
+      await initialLoad();
+      await subscribeRealtime();
+      await ensurePromptOfDay();
     })();
   </script>
 </body>
