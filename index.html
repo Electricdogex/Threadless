@@ -221,6 +221,9 @@
     let nextCursor = null; // { created_at, id }
     const seen = new Set(); // post ids rendered
 
+    // Track parent post maturity for reply gating
+    const POST_MATURE = new Map(); // post_id -> boolean
+
     // --- Mature visibility preference ---
     let SHOW_MATURE = (localStorage.getItem('threadless_show_mature') === '1');
     matureToggle.checked = SHOW_MATURE;
@@ -236,14 +239,14 @@
     const deobfuscate = s => s.replace(/[1!|@4$30 75 8]/g, ch => DEOB[ch] ?? ch);
     const canonical = s => deobfuscate((s||'').normalize('NFKC').replace(ZERO_WIDTH,'')).toLowerCase().trim();
 
-    // --- Stronger fuzzy detector (catches fuk/f*ck/f.u.c.k etc.) ---
+    // --- Stronger fuzzy detector with fewer false positives ---
     const SEP = /[^a-z0-9]+/g;
     function collapseRepeats(s){ return s.replace(/([a-z0-9])\1{2,}/g, '$1$1'); }
     function tokensForFuzzy(s){
       const base = collapseRepeats(canonical(s));
       const tokens = base.replace(SEP, ' ').trim().split(/\s+/).filter(Boolean);
       const joined = base.replace(SEP, '');
-      return { tokens, joined };
+      return { tokens, joined, base };
     }
     function lev(a,b){
       const m=a.length, n=b.length;
@@ -268,14 +271,24 @@
     function fuzzyBad(text){
       const { tokens, joined } = tokensForFuzzy(text);
       if (!tokens.length && !joined) return false;
-      function hit(base){
+
+      function tokenHit(base){
         const maxEd = 1, bl = base.length;
         for (const t of tokens){
           const tl = t.length;
+          // keep token-level reasonably close in length
           if (Math.abs(tl - bl) > 2) continue;
           if (lev(t, base) <= maxEd) return true;
         }
-        const minL = Math.max(3, bl - 1), maxL = Math.min(bl + 2, joined.length);
+        return false;
+      }
+
+      function joinedHit(base){
+        // To prevent "ass" -> "assume" false positives:
+        // Only do sliding-window checks for bases length >= 4.
+        if (base.length < 4) return false;
+        const maxEd = 1, bl = base.length;
+        const minL = Math.max(4, bl - 1), maxL = Math.min(bl + 2, joined.length);
         for (let L=minL; L<=maxL; L++){
           for (let i=0; i+L<=joined.length; i++){
             if (lev(joined.slice(i,i+L), base) <= maxEd) return true;
@@ -283,15 +296,27 @@
         }
         return false;
       }
-      const joinedLite = joined.replace(/ph/g,'f').replace(/q/g,'k').replace(/ck/g,'k').replace(/x/g,'ks');
-      if (FUZZY_CORE.some(hit)) return true;
-      const j2 = tokensForFuzzy(joinedLite).joined;
-      if (j2){
+
+      for (const base of FUZZY_CORE){
+        if (tokenHit(base)) return true;
+        if (joined && joinedHit(base)) return true;
+      }
+
+      // Light phonetic normalizations for obfuscations like "phuk", "fucc", "f*ck"
+      const joinedLite = joined
+        .replace(/\*/g,'')
+        .replace(/ph/g,'f')
+        .replace(/q/g,'k')
+        .replace(/ck/g,'k')
+        .replace(/x/g,'ks');
+
+      if (joinedLite){
         for (const base of FUZZY_CORE){
-          const bl = base.length, minL = Math.max(3, bl-1), maxL = Math.min(bl+2, j2.length);
+          if (base.length < 4) continue; // same safeguard for short roots
+          const bl = base.length, minL = Math.max(4, bl-1), maxL = Math.min(bl+2, joinedLite.length);
           for (let L=minL; L<=maxL; L++){
-            for (let i=0; i+L<=j2.length; i++){
-              if (lev(j2.slice(i,i+L), base) <= 1) return true;
+            for (let i=0; i+L<=joinedLite.length; i++){
+              if (lev(joinedLite.slice(i,i+L), base) <= 1) return true;
             }
           }
         }
@@ -304,7 +329,7 @@
     let BAD_RE = null;
 
     const FALLBACK_BAD = [
-      // (Your expanded list from the current build)
+      /* (expanded list you already shipped; trimmed here for brevity) */
       {word:'nigger', category:'slur'},
       {word:'nigga', category:'slur'},
       {word:'coon', category:'slur'},
@@ -531,7 +556,13 @@
       return isMatureText(row.content || '');
     };
     function shouldRenderPost(row){ return SHOW_MATURE || !rowIsMaturePost(row); }
-    function shouldRenderReply(row){ return SHOW_MATURE || !rowIsMatureReply(row); }
+    function parentIsMature(post_id){ return !!POST_MATURE.get(post_id); }
+    function shouldRenderReply(row){
+      // If mature off, only show a reply when BOTH the reply and its parent are non-mature.
+      if (SHOW_MATURE) return true;
+      if (parentIsMature(row.post_id)) return false;
+      return !rowIsMatureReply(row);
+    }
 
     // --- Render: reactions/report row ---
     function emojiRow(post){
@@ -605,9 +636,14 @@
 
     // --- Post renderer
     function renderPost(row){
+      // Store parent maturity for downstream gating of replies
+      const isMat = rowIsMaturePost(row);
+      POST_MATURE.set(row.id, isMat);
+
       if (!shouldRenderPost(row)) return null;
       if (seen.has(row.id)) return null;
       seen.add(row.id);
+
       const el = document.createElement('div');
       el.className = 'post';
       el.dataset.id = row.id;
@@ -637,6 +673,8 @@
       if (!rows.length) return;
       const frag = document.createDocumentFragment();
       for (const r of rows){
+        // store parent maturity even if we end up not rendering due to toggle
+        POST_MATURE.set(r.id, rowIsMaturePost(r));
         const node = renderPost(r);
         if (node) frag.appendChild(node);
       }
@@ -659,8 +697,10 @@
         if (!wrap) continue;
         // remove old rendered replies (keep composer = last child)
         [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
+        // If parent is mature and mature toggle is OFF, skip drawing replies entirely
+        const parentMat = parentIsMature(post_id);
         for (const r of rows) {
-          if (shouldRenderReply(r)) {
+          if (SHOW_MATURE || (!parentMat && !rowIsMatureReply(r))) {
             wrap.insertBefore(renderReply(r), wrap.lastChild);
           }
         }
@@ -679,7 +719,6 @@
 
       const { data, error, status } = await q;
 
-      // detect missing replies.mature column independently
       if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
         if (HAS_MATURE_REPLIES){ HAS_MATURE_REPLIES = false; return loadRepliesForPosts(postIds); }
       }
@@ -790,6 +829,7 @@
     async function reloadFeed(){
       seen.clear();
       nextCursor = null;
+      POST_MATURE.clear();
       feedEl.innerHTML = '';
       await initialLoad();
     }
@@ -874,7 +914,6 @@
         if (HAS_MATURE_REPLIES) payload.mature = isMatureText(content);
         const r = await sb.from('replies').insert(payload);
         if (r.error){
-          // If replies.mature missing, fall back and keep posts flag untouched
           if (r.error.code === '42703' || /mature.*does not exist/i.test(r.error.message||'')) {
             HAS_MATURE_REPLIES = false;
             await sb.from('replies').insert({ post_id, content, flair: SESSION_TAG });
@@ -916,13 +955,9 @@
       const end = new Date(); end.setHours(23,59,59,999);
 
       const { data, error } = await sb.from(SOURCE)
-        .select('id')
-        .gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
+        .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
         .eq('flair','PromptBot').limit(1);
-      if (!error && data && data.length) {
-        localStorage.setItem('threadless_prompt_date', today);
-        return;
-      }
+      if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
 
       const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
       await insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
@@ -935,7 +970,6 @@
     postBtn.addEventListener('click', post);
 
     async function insertPost(payload){
-      // Try full payload (with mature when available on posts)
       if (HAS_FLAIR || HAS_MATURE_POSTS){
         const r1 = await sb.from('posts').insert(payload);
         if (!r1.error) return r1;
@@ -982,6 +1016,8 @@
       sb.channel('threadless_posts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
           const row = payload.new;
+          // store parent maturity immediately for downstream reply gating
+          POST_MATURE.set(row.id, rowIsMaturePost(row));
           if (!shouldRenderPost(row)) return;
           const node = renderPost(row);
           if (node) { feedEl.prepend(node); hydrateReactions([row.id]); }
@@ -989,6 +1025,7 @@
         .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
           const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
           if (el) el.remove();
+          POST_MATURE.delete(payload.old.id);
         })
         .subscribe((state)=>{ showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
 
@@ -999,6 +1036,7 @@
           if (!check.data){
             const el = document.querySelector(`.post[data-id="${pid}"]`);
             if (el) el.remove();
+            POST_MATURE.delete(pid);
           }
         })
         .subscribe();
@@ -1016,7 +1054,6 @@
       sb.channel('threadless_replies')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
           const r = payload.new;
-          // FIX: Use reply maturity logic specifically, not the posts flag.
           if (shouldRenderReply(r)){
             const wrap = document.getElementById(`replies_${r.post_id}`);
             if (wrap){
