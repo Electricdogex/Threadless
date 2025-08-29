@@ -214,9 +214,10 @@
     const COOLDOWN_SEC = 15;
     const PAGE_SIZE = 30;
     let SOURCE = 'posts_public'; // will auto-fallback to 'posts' if missing
-    let HAS_FLAIR = true;        // detect if flair column exists
-    let HAS_MATURE = true;       // detect if mature column exists
-    let REACTIONS_AVAILABLE = true; // detect if reactions table exists
+    let HAS_FLAIR = true;                 // posts/replies may have flair
+    let HAS_MATURE_POSTS = true;          // posts.mature column exists?
+    let HAS_MATURE_REPLIES = true;        // replies.mature column exists?
+    let REACTIONS_AVAILABLE = true;       // reactions table exists?
     let nextCursor = null; // { created_at, id }
     const seen = new Set(); // post ids rendered
 
@@ -235,191 +236,228 @@
     const deobfuscate = s => s.replace(/[1!|@4$30 75 8]/g, ch => DEOB[ch] ?? ch);
     const canonical = s => deobfuscate((s||'').normalize('NFKC').replace(ZERO_WIDTH,'')).toLowerCase().trim();
 
+    // --- Stronger fuzzy detector (catches fuk/f*ck/f.u.c.k etc.) ---
+    const SEP = /[^a-z0-9]+/g;
+    function collapseRepeats(s){ return s.replace(/([a-z0-9])\1{2,}/g, '$1$1'); }
+    function tokensForFuzzy(s){
+      const base = collapseRepeats(canonical(s));
+      const tokens = base.replace(SEP, ' ').trim().split(/\s+/).filter(Boolean);
+      const joined = base.replace(SEP, '');
+      return { tokens, joined };
+    }
+    function lev(a,b){
+      const m=a.length, n=b.length;
+      if (!m) return n; if (!n) return m;
+      const dp = Array(n+1); for (let j=0;j<=n;j++) dp[j]=j;
+      for (let i=1;i<=m;i++){
+        let prev = dp[0], tmp; dp[0]=i;
+        for (let j=1;j<=n;j++){
+          tmp = dp[j];
+          dp[j] = (a[i-1]===b[j-1]) ? prev : 1 + Math.min(prev, dp[j], dp[j-1]);
+          prev = tmp;
+        }
+      }
+      return dp[n];
+    }
+    const FUZZY_CORE = [
+      'fuck','shit','ass','asshole','bastard','motherfucker','bullshit',
+      'bitch','prick','twat','wanker','bollocks','bugger','goddamn','damn',
+      'dick','cock','pussy','cunt','tits','boobs',
+      'retard','fag','faggot','dyke','tranny'
+    ];
+    function fuzzyBad(text){
+      const { tokens, joined } = tokensForFuzzy(text);
+      if (!tokens.length && !joined) return false;
+      function hit(base){
+        const maxEd = 1, bl = base.length;
+        for (const t of tokens){
+          const tl = t.length;
+          if (Math.abs(tl - bl) > 2) continue;
+          if (lev(t, base) <= maxEd) return true;
+        }
+        const minL = Math.max(3, bl - 1), maxL = Math.min(bl + 2, joined.length);
+        for (let L=minL; L<=maxL; L++){
+          for (let i=0; i+L<=joined.length; i++){
+            if (lev(joined.slice(i,i+L), base) <= maxEd) return true;
+          }
+        }
+        return false;
+      }
+      const joinedLite = joined.replace(/ph/g,'f').replace(/q/g,'k').replace(/ck/g,'k').replace(/x/g,'ks');
+      if (FUZZY_CORE.some(hit)) return true;
+      const j2 = tokensForFuzzy(joinedLite).joined;
+      if (j2){
+        for (const base of FUZZY_CORE){
+          const bl = base.length, minL = Math.max(3, bl-1), maxL = Math.min(bl+2, j2.length);
+          for (let L=minL; L<=maxL; L++){
+            for (let i=0; i+L<=j2.length; i++){
+              if (lev(j2.slice(i,i+L), base) <= 1) return true;
+            }
+          }
+        }
+      }
+      return false;
+    }
+
     // --- Bad-words cache (from DB) + expanded fallback ---
     let BAD_WORDS = []; // [{word, category}, ...]
     let BAD_RE = null;
 
-const FALLBACK_BAD = [
-  // --- slurs: race/ethnicity (moderation filter) ---
-  {word:'nigger', category:'slur'},
-  {word:'nigga', category:'slur'},
-  {word:'coon', category:'slur'},
-  {word:'porch monkey', category:'slur'},
-  {word:'jigaboo', category:'slur'},
-  {word:'sambo', category:'slur'},
-  {word:'pickaninny', category:'slur'},
-  {word:'tar baby', category:'slur'},
-
-  {word:'chink', category:'slur'},
-  {word:'gook', category:'slur'},
-  {word:'zipperhead', category:'slur'},
-  {word:'slant', category:'slur'},
-  {word:'ching chong', category:'slur'},
-
-  {word:'spic', category:'slur'},
-  {word:'beaner', category:'slur'},
-  {word:'wetback', category:'slur'},
-  {word:'cholo', category:'slur'},
-
-  {word:'kike', category:'slur'},
-  {word:'yid', category:'slur'},
-
-  {word:'paki', category:'slur'},
-  {word:'raghead', category:'slur'},
-  {word:'sand nigger', category:'slur'},
-
-  {word:'gypsy', category:'slur'},
-  {word:'pikey', category:'slur'},
-
-  {word:'abo', category:'slur'},
-  {word:'boong', category:'slur'},
-
-  {word:'cracker', category:'slur'},
-  {word:'honky', category:'slur'},
-  {word:'white trash', category:'slur'},
-
-  // --- slurs: gender/sexuality ---
-  {word:'faggot', category:'slur'},
-  {word:'fag', category:'slur'},
-  {word:'dyke', category:'slur'},
-  {word:'shemale', category:'slur'},
-  {word:'tranny', category:'slur'},
-  {word:'homo', category:'slur'},
-  {word:'butt pirate', category:'slur'},
-
-  // --- slurs: disability/condition ---
-  {word:'retard', category:'slur'},
-  {word:'spaz', category:'slur'},
-  {word:'mongoloid', category:'slur'},
-  {word:'cripple', category:'slur'},
-  {word:'downie', category:'slur'},
-  {word:'autist', category:'slur'},
-
-  // --- harassment/misogyny (non-family-friendly insults) ---
-  {word:'bitch', category:'harassment'},
-  {word:'whore', category:'sexual'},
-  {word:'slut', category:'sexual'},
-  {word:'thot', category:'sexual'},
-  {word:'skank', category:'sexual'},
-  {word:'cunt', category:'sexual'},
-  {word:'prick', category:'harassment'},
-  {word:'twat', category:'harassment'},
-  {word:'douchebag', category:'harassment'},
-  {word:'douche', category:'harassment'},
-  {word:'nonce', category:'harassment'}, // UK insult implying child abuse
-
-  // --- extremism / hate slogans & identifiers ---
-  {word:'nazi', category:'extremist'},
-  {word:'neo-nazi', category:'extremist'},
-  {word:'heil hitler', category:'extremist'},
-  {word:'hail hitler', category:'extremist'},
-  {word:'sieg heil', category:'extremist'},
-  {word:'third reich', category:'extremist'},
-  {word:'swastika', category:'extremist'},
-  {word:'kkk', category:'extremist'},
-  {word:'white power', category:'extremist'},
-  {word:'white pride', category:'extremist'},
-  {word:'1488', category:'extremist'},
-  {word:'14 words', category:'extremist'},
-  {word:'wpww', category:'extremist'},
-  {word:'blood and soil', category:'extremist'},
-  {word:'great replacement', category:'extremist'},
-  {word:'holohoax', category:'extremist'},
-  {word:'holocaust denial', category:'extremist'},
-  {word:'rahowa', category:'extremist'},
-  {word:'atomwaffen', category:'extremist'},
-
-  // --- threats / violence / self-harm ---
-  {word:'kill yourself', category:'self-harm'},
-  {word:'kys', category:'self-harm'},
-  {word:'hang yourself', category:'self-harm'},
-  {word:'self-harm', category:'self-harm'},
-  {word:'suicide', category:'self-harm'},
-  {word:'cut myself', category:'self-harm'},
-  {word:'overdose', category:'self-harm'},
-  {word:'od', category:'self-harm'},
-
-  {word:'dox', category:'threat'},
-  {word:'swat', category:'threat'},
-  {word:'i will kill you', category:'threat'},
-  {word:'die bitch', category:'threat'},
-  {word:'lynch', category:'violence'},
-  {word:'gas chamber', category:'violence'},
-
-  // --- explicit / sexual / NSFW ---
-  {word:'rape', category:'harm'},
-  {word:'rapist', category:'harm'},
-  {word:'molest', category:'harm'},
-  {word:'groomer', category:'harm'},
-  {word:'pedophile', category:'harm'},
-  {word:'paedophile', category:'harm'},
-  {word:'pedo', category:'harm'},
-  {word:'cp', category:'harm'}, // child sexual abuse content abbrev
-  {word:'loli', category:'sexual'},
-  {word:'lolita', category:'sexual'},
-  {word:'incest', category:'sexual'},
-  {word:'bestiality', category:'sexual'},
-  {word:'zoophilia', category:'sexual'},
-  {word:'necrophilia', category:'sexual'},
-
-  {word:'cum', category:'sexual'},
-  {word:'cumshot', category:'sexual'},
-  {word:'jizz', category:'sexual'},
-  {word:'jism', category:'sexual'},
-  {word:'semen', category:'sexual'},
-  {word:'cock', category:'sexual'},
-  {word:'dick', category:'sexual'},
-  {word:'penis', category:'sexual'},
-  {word:'pussy', category:'sexual'},
-  {word:'vagina', category:'sexual'},
-  {word:'tits', category:'sexual'},
-  {word:'boobs', category:'sexual'},
-  {word:'nipple', category:'sexual'},
-  {word:'ass', category:'profanity'},
-  {word:'asshole', category:'profanity'},
-  {word:'arse', category:'profanity'},
-  {word:'buttplug', category:'sexual'},
-  {word:'butt plug', category:'sexual'},
-  {word:'anal', category:'sexual'},
-  {word:'rimjob', category:'sexual'},
-  {word:'blowjob', category:'sexual'},
-  {word:'handjob', category:'sexual'},
-  {word:'deepthroat', category:'sexual'},
-  {word:'facial', category:'sexual'},
-  {word:'milf', category:'sexual'},
-  {word:'gilf', category:'sexual'},
-  {word:'hentai', category:'sexual'},
-  {word:'futanari', category:'sexual'},
-  {word:'nsfw', category:'sexual'},
-  {word:'onlyfans', category:'sexual'},
-  {word:'porn', category:'sexual'},
-  {word:'porno', category:'sexual'},
-  {word:'xxx', category:'sexual'},
-
-  // --- general profanity (short list; expand to taste) ---
-  {word:'fuck', category:'profanity'},
-  {word:'fucking', category:'profanity'},
-  {word:'motherfucker', category:'profanity'},
-  {word:'mf', category:'profanity'},
-  {word:'shit', category:'profanity'},
-  {word:'bullshit', category:'profanity'},
-  {word:'bastard', category:'profanity'},
-  {word:'goddamn', category:'profanity'},
-  {word:'damn', category:'profanity'},
-  {word:'piss', category:'profanity'},
-  {word:'wanker', category:'profanity'},
-  {word:'bollocks', category:'profanity'},
-  {word:'bugger', category:'profanity'},
-
-  // --- gore / NSFL ---
-  {word:'gore', category:'nsfl'},
-  {word:'snuff', category:'nsfl'},
-  {word:'dismember', category:'nsfl'},
-  {word:'beheading', category:'nsfl'},
-  {word:'decapitation', category:'nsfl'},
-  {word:'disembowel', category:'nsfl'},
-];
-
+    const FALLBACK_BAD = [
+      // (Your expanded list from the current build)
+      {word:'nigger', category:'slur'},
+      {word:'nigga', category:'slur'},
+      {word:'coon', category:'slur'},
+      {word:'porch monkey', category:'slur'},
+      {word:'jigaboo', category:'slur'},
+      {word:'sambo', category:'slur'},
+      {word:'pickaninny', category:'slur'},
+      {word:'tar baby', category:'slur'},
+      {word:'chink', category:'slur'},
+      {word:'gook', category:'slur'},
+      {word:'zipperhead', category:'slur'},
+      {word:'slant', category:'slur'},
+      {word:'ching chong', category:'slur'},
+      {word:'spic', category:'slur'},
+      {word:'beaner', category:'slur'},
+      {word:'wetback', category:'slur'},
+      {word:'cholo', category:'slur'},
+      {word:'kike', category:'slur'},
+      {word:'yid', category:'slur'},
+      {word:'paki', category:'slur'},
+      {word:'raghead', category:'slur'},
+      {word:'sand nigger', category:'slur'},
+      {word:'gypsy', category:'slur'},
+      {word:'pikey', category:'slur'},
+      {word:'abo', category:'slur'},
+      {word:'boong', category:'slur'},
+      {word:'cracker', category:'slur'},
+      {word:'honky', category:'slur'},
+      {word:'white trash', category:'slur'},
+      {word:'faggot', category:'slur'},
+      {word:'fag', category:'slur'},
+      {word:'dyke', category:'slur'},
+      {word:'shemale', category:'slur'},
+      {word:'tranny', category:'slur'},
+      {word:'homo', category:'slur'},
+      {word:'butt pirate', category:'slur'},
+      {word:'retard', category:'slur'},
+      {word:'spaz', category:'slur'},
+      {word:'mongoloid', category:'slur'},
+      {word:'cripple', category:'slur'},
+      {word:'downie', category:'slur'},
+      {word:'autist', category:'slur'},
+      {word:'bitch', category:'harassment'},
+      {word:'whore', category:'sexual'},
+      {word:'slut', category:'sexual'},
+      {word:'thot', category:'sexual'},
+      {word:'skank', category:'sexual'},
+      {word:'cunt', category:'sexual'},
+      {word:'prick', category:'harassment'},
+      {word:'twat', category:'harassment'},
+      {word:'douchebag', category:'harassment'},
+      {word:'douche', category:'harassment'},
+      {word:'nonce', category:'harassment'},
+      {word:'nazi', category:'extremist'},
+      {word:'neo-nazi', category:'extremist'},
+      {word:'heil hitler', category:'extremist'},
+      {word:'hail hitler', category:'extremist'},
+      {word:'sieg heil', category:'extremist'},
+      {word:'third reich', category:'extremist'},
+      {word:'swastika', category:'extremist'},
+      {word:'kkk', category:'extremist'},
+      {word:'white power', category:'extremist'},
+      {word:'white pride', category:'extremist'},
+      {word:'1488', category:'extremist'},
+      {word:'14 words', category:'extremist'},
+      {word:'wpww', category:'extremist'},
+      {word:'blood and soil', category:'extremist'},
+      {word:'great replacement', category:'extremist'},
+      {word:'holohoax', category:'extremist'},
+      {word:'holocaust denial', category:'extremist'},
+      {word:'rahowa', category:'extremist'},
+      {word:'atomwaffen', category:'extremist'},
+      {word:'kill yourself', category:'self-harm'},
+      {word:'kys', category:'self-harm'},
+      {word:'hang yourself', category:'self-harm'},
+      {word:'self-harm', category:'self-harm'},
+      {word:'suicide', category:'self-harm'},
+      {word:'cut myself', category:'self-harm'},
+      {word:'overdose', category:'self-harm'},
+      {word:'od', category:'self-harm'},
+      {word:'dox', category:'threat'},
+      {word:'swat', category:'threat'},
+      {word:'i will kill you', category:'threat'},
+      {word:'die bitch', category:'threat'},
+      {word:'lynch', category:'violence'},
+      {word:'gas chamber', category:'violence'},
+      {word:'rape', category:'harm'},
+      {word:'rapist', category:'harm'},
+      {word:'molest', category:'harm'},
+      {word:'groomer', category:'harm'},
+      {word:'pedophile', category:'harm'},
+      {word:'paedophile', category:'harm'},
+      {word:'pedo', category:'harm'},
+      {word:'cp', category:'harm'},
+      {word:'loli', category:'sexual'},
+      {word:'lolita', category:'sexual'},
+      {word:'incest', category:'sexual'},
+      {word:'bestiality', category:'sexual'},
+      {word:'zoophilia', category:'sexual'},
+      {word:'necrophilia', category:'sexual'},
+      {word:'cum', category:'sexual'},
+      {word:'cumshot', category:'sexual'},
+      {word:'jizz', category:'sexual'},
+      {word:'jism', category:'sexual'},
+      {word:'semen', category:'sexual'},
+      {word:'cock', category:'sexual'},
+      {word:'dick', category:'sexual'},
+      {word:'penis', category:'sexual'},
+      {word:'pussy', category:'sexual'},
+      {word:'vagina', category:'sexual'},
+      {word:'tits', category:'sexual'},
+      {word:'boobs', category:'sexual'},
+      {word:'nipple', category:'sexual'},
+      {word:'ass', category:'profanity'},
+      {word:'asshole', category:'profanity'},
+      {word:'arse', category:'profanity'},
+      {word:'buttplug', category:'sexual'},
+      {word:'butt plug', category:'sexual'},
+      {word:'anal', category:'sexual'},
+      {word:'rimjob', category:'sexual'},
+      {word:'blowjob', category:'sexual'},
+      {word:'handjob', category:'sexual'},
+      {word:'deepthroat', category:'sexual'},
+      {word:'facial', category:'sexual'},
+      {word:'milf', category:'sexual'},
+      {word:'gilf', category:'sexual'},
+      {word:'hentai', category:'sexual'},
+      {word:'futanari', category:'sexual'},
+      {word:'nsfw', category:'sexual'},
+      {word:'onlyfans', category:'sexual'},
+      {word:'porn', category:'sexual'},
+      {word:'porno', category:'sexual'},
+      {word:'xxx', category:'sexual'},
+      {word:'fuck', category:'profanity'},
+      {word:'fucking', category:'profanity'},
+      {word:'motherfucker', category:'profanity'},
+      {word:'mf', category:'profanity'},
+      {word:'shit', category:'profanity'},
+      {word:'bullshit', category:'profanity'},
+      {word:'bastard', category:'profanity'},
+      {word:'goddamn', category:'profanity'},
+      {word:'damn', category:'profanity'},
+      {word:'piss', category:'profanity'},
+      {word:'wanker', category:'profanity'},
+      {word:'bollocks', category:'profanity'},
+      {word:'bugger', category:'profanity'},
+      {word:'gore', category:'nsfl'},
+      {word:'snuff', category:'nsfl'},
+      {word:'dismember', category:'nsfl'},
+      {word:'beheading', category:'nsfl'},
+      {word:'decapitation', category:'nsfl'},
+      {word:'disembowel', category:'nsfl'},
+    ];
 
     const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     function rebuildBadRegex(){
@@ -431,19 +469,18 @@ const FALLBACK_BAD = [
     async function loadBadWords(){
       const { data, error } = await sb.from('bad_words').select('word, category');
       if (!error && data){
-        // merge with fallback (dedupe by word)
-        const seen = new Set();
+        const seenW = new Set();
         BAD_WORDS = [...data, ...FALLBACK_BAD].filter(({word})=>{
           const w = (word||'').toLowerCase();
-          if (seen.has(w)) return false; seen.add(w); return true;
+          if (seenW.has(w)) return false; seenW.add(w); return true;
         });
       } else {
         BAD_WORDS = FALLBACK_BAD;
       }
       rebuildBadRegex();
     }
-    const matchesBadWord = t => BAD_RE ? BAD_RE.test(canonical(t)) : false;
-    const needsNudge = text => matchesBadWord(text);
+    const matchesBadWord = t => (BAD_RE && BAD_RE.test(canonical(t))) || fuzzyBad(t);
+    const needsNudge   = text => matchesBadWord(text);
     const isMatureText = text => matchesBadWord(text);
 
     // --- Flair/session tag ---
@@ -484,14 +521,19 @@ const FALLBACK_BAD = [
     function toast(msg){ toastEl.textContent = msg; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none', 1600); }
     function showStatus(msg){ statusEl.textContent = msg; }
 
-    // --- Visibility helpers for mature content ---
-    const rowIsMature = row => {
-      if (HAS_MATURE && typeof row.mature === 'boolean') return row.mature;
+    // --- Visibility helpers (separate flags for posts vs replies) ---
+    const rowIsMaturePost = row => {
+      if (HAS_MATURE_POSTS && typeof row.mature === 'boolean') return row.mature === true;
       return isMatureText(row.content || '');
     };
-    function shouldRender(row){ return SHOW_MATURE || !rowIsMature(row); }
+    const rowIsMatureReply = row => {
+      if (HAS_MATURE_REPLIES && typeof row.mature === 'boolean') return row.mature === true;
+      return isMatureText(row.content || '');
+    };
+    function shouldRenderPost(row){ return SHOW_MATURE || !rowIsMaturePost(row); }
+    function shouldRenderReply(row){ return SHOW_MATURE || !rowIsMatureReply(row); }
 
-    // --- Render: reactions/report row
+    // --- Render: reactions/report row ---
     function emojiRow(post){
       const wrap = document.createElement('div');
       wrap.className = 'actions';
@@ -520,7 +562,7 @@ const FALLBACK_BAD = [
       return wrap;
     }
 
-    // --- Replies: renderer + composer
+    // --- Replies: renderer + composer ---
     function repliesSection(post){
       const box = document.createElement('div');
       box.className = 'replies';
@@ -563,7 +605,7 @@ const FALLBACK_BAD = [
 
     // --- Post renderer
     function renderPost(row){
-      if (!shouldRender(row)) return null;
+      if (!shouldRenderPost(row)) return null;
       if (seen.has(row.id)) return null;
       seen.add(row.id);
       const el = document.createElement('div');
@@ -615,56 +657,72 @@ const FALLBACK_BAD = [
       for (const [post_id, rows] of groups.entries()) {
         const wrap = document.getElementById(`replies_${post_id}`);
         if (!wrap) continue;
+        // remove old rendered replies (keep composer = last child)
         [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
         for (const r of rows) {
-          if (SHOW_MATURE || !rowIsMature(r)) {
+          if (shouldRenderReply(r)) {
             wrap.insertBefore(renderReply(r), wrap.lastChild);
           }
         }
       }
     }
+
     async function loadRepliesForPosts(postIds){
       if (!postIds.length) return;
       let q = sb.from('replies')
-        .select(HAS_MATURE ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
+        .select(HAS_MATURE_REPLIES ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
         .in('post_id', postIds)
         .order('post_id', { ascending: true })
         .order('created_at', { ascending: true });
-      if (HAS_MATURE && !SHOW_MATURE) q = q.eq('mature', false);
+
+      if (HAS_MATURE_REPLIES && !SHOW_MATURE) q = q.eq('mature', false);
+
       const { data, error, status } = await q;
+
+      // detect missing replies.mature column independently
       if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
-        if (HAS_MATURE){ HAS_MATURE = false; return loadRepliesForPosts(postIds); }
+        if (HAS_MATURE_REPLIES){ HAS_MATURE_REPLIES = false; return loadRepliesForPosts(postIds); }
       }
       if (error) { console.warn('replies bulk load error', error); return; }
+
       const grouped = groupBy(data || [], 'post_id');
       renderRepliesBatch(grouped);
     }
+
     async function loadReplies(post_id){
       let q = sb.from('replies')
-        .select(HAS_MATURE ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
+        .select(HAS_MATURE_REPLIES ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
         .eq('post_id', post_id)
         .order('created_at', { ascending: true })
         .limit(200);
-      if (HAS_MATURE && !SHOW_MATURE) q = q.eq('mature', false);
+
+      if (HAS_MATURE_REPLIES && !SHOW_MATURE) q = q.eq('mature', false);
+
       const { data, error, status } = await q;
+
       if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
-        if (HAS_MATURE){ HAS_MATURE = false; return loadReplies(post_id); }
+        if (HAS_MATURE_REPLIES){ HAS_MATURE_REPLIES = false; return loadReplies(post_id); }
       }
       if (error){ console.warn('replies load error', error); return; }
+
       const m = new Map([[post_id, data || []]]);
       renderRepliesBatch(m);
     }
 
-    // --- Pagination (with source + flair + mature fallback)
+    // --- Pagination (with source + flair + mature fallback) ---
     async function fetchPage(cursor){
-      const baseFields = 'id, content, created_at' + (HAS_FLAIR ? ', flair' : '') + (HAS_MATURE ? ', mature' : '');
+      const baseFields =
+        'id, content, created_at'
+        + (HAS_FLAIR ? ', flair' : '')
+        + (HAS_MATURE_POSTS ? ', mature' : '');
+
       let q = sb.from(SOURCE)
         .select(baseFields)
         .order('created_at', { ascending:false })
         .order('id', { ascending:false })
         .limit(PAGE_SIZE);
 
-      if (!SHOW_MATURE && HAS_MATURE) q = q.eq('mature', false);
+      if (!SHOW_MATURE && HAS_MATURE_POSTS) q = q.eq('mature', false);
 
       if (cursor){
         const cts = encodeURIComponent(cursor.created_at);
@@ -680,9 +738,8 @@ const FALLBACK_BAD = [
       }
 
       if (status === 400 || (error && (error.code === '42703'))){
-        // detect missing columns
         if (/flair.*does not exist/i.test(error.message||'')) { if (HAS_FLAIR){ HAS_FLAIR = false; return fetchPage(cursor);} }
-        if (/mature.*does not exist/i.test(error.message||'')) { if (HAS_MATURE){ HAS_MATURE = false; return fetchPage(cursor);} }
+        if (/mature.*does not exist/i.test(error.message||'')) { if (HAS_MATURE_POSTS){ HAS_MATURE_POSTS = false; return fetchPage(cursor);} }
       }
 
       if (error){
@@ -691,7 +748,7 @@ const FALLBACK_BAD = [
         return { rows:[], hasMore:false, newCursor:null };
       }
 
-      const rows = (data || []).filter(r => shouldRender(r)); // client-side filter if no mature column
+      const rows = (data || []).filter(r => shouldRenderPost(r)); // client-side safety if no posts.mature
       const last = (data || [])[ (data||[]).length - 1 ] || null;
       const hasMore = (data||[]).length === PAGE_SIZE;
       return { rows, hasMore, newCursor: last ? { created_at: last.created_at, id: last.id } : null };
@@ -729,7 +786,7 @@ const FALLBACK_BAD = [
       setLoading(false);
     }
 
-    // --- Feed reload on toggle change
+    // --- Feed reload on toggle change ---
     async function reloadFeed(){
       seen.clear();
       nextCursor = null;
@@ -737,7 +794,7 @@ const FALLBACK_BAD = [
       await initialLoad();
     }
 
-    // --- Reactions
+    // --- Reactions ---
     async function hydrateReactions(postIds){
       const visible = postIds.filter(Boolean);
       if (!REACTIONS_AVAILABLE || !visible.length) return;
@@ -780,7 +837,7 @@ const FALLBACK_BAD = [
       } finally { btn.disabled = false; }
     }
 
-    // --- Reports
+    // --- Reports ---
     async function report(post_id){
       if (!confirm('Report this post for moderation?')) return;
 
@@ -803,7 +860,7 @@ const FALLBACK_BAD = [
       }
     }
 
-    // --- Replies: send
+    // --- Replies: send ---
     async function sendReply(post_id, textarea){
       const content = sanitize(textarea.value);
       if (!content) return;
@@ -814,11 +871,12 @@ const FALLBACK_BAD = [
       textarea.disabled = true;
       try{
         let payload = { post_id, content, flair: SESSION_TAG };
-        if (HAS_MATURE) payload.mature = isMatureText(content);
+        if (HAS_MATURE_REPLIES) payload.mature = isMatureText(content);
         const r = await sb.from('replies').insert(payload);
         if (r.error){
+          // If replies.mature missing, fall back and keep posts flag untouched
           if (r.error.code === '42703' || /mature.*does not exist/i.test(r.error.message||'')) {
-            HAS_MATURE = false;
+            HAS_MATURE_REPLIES = false;
             await sb.from('replies').insert({ post_id, content, flair: SESSION_TAG });
           } else {
             throw r.error;
@@ -834,7 +892,7 @@ const FALLBACK_BAD = [
       }
     }
 
-    // --- Prompt of the day (expanded list)
+    // --- Prompt of the day (expanded list) ---
     const PROMPTS = [
       "What’s a tiny habit that changed your life?",
       "Describe a place you miss that no longer exists.",
@@ -858,28 +916,33 @@ const FALLBACK_BAD = [
       const end = new Date(); end.setHours(23,59,59,999);
 
       const { data, error } = await sb.from(SOURCE)
-        .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
+        .select('id')
+        .gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
         .eq('flair','PromptBot').limit(1);
-      if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
+      if (!error && data && data.length) {
+        localStorage.setItem('threadless_prompt_date', today);
+        return;
+      }
 
       const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
       await insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
       localStorage.setItem('threadless_prompt_date', today);
     }
 
-    // --- Post flow
+    // --- Post flow ---
     textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
     textEl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }});
     postBtn.addEventListener('click', post);
 
     async function insertPost(payload){
-      if (HAS_FLAIR || HAS_MATURE){
+      // Try full payload (with mature when available on posts)
+      if (HAS_FLAIR || HAS_MATURE_POSTS){
         const r1 = await sb.from('posts').insert(payload);
         if (!r1.error) return r1;
         if (r1.error){
           if (HAS_FLAIR && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))) HAS_FLAIR = false;
-          if (HAS_MATURE && (r1.error.code === '42703' || /mature.*does not exist/i.test(r1.error.message||''))) HAS_MATURE = false;
-          if (HAS_FLAIR || HAS_MATURE) return insertPost({ content: payload.content }); // retry lean
+          if (HAS_MATURE_POSTS && (r1.error.code === '42703' || /mature.*does not exist/i.test(r1.error.message||''))) HAS_MATURE_POSTS = false;
+          if (HAS_FLAIR || HAS_MATURE_POSTS) return insertPost({ content: payload.content }); // retry lean
           return r1;
         }
       }
@@ -900,7 +963,7 @@ const FALLBACK_BAD = [
       postBtn.disabled = true;
       try{
         let payload = { content, flair: SESSION_TAG };
-        if (HAS_MATURE) payload.mature = isMatureText(content);
+        if (HAS_MATURE_POSTS) payload.mature = isMatureText(content);
         const { error } = await insertPost(payload);
         if (error) throw error;
         textEl.value = '';
@@ -914,12 +977,12 @@ const FALLBACK_BAD = [
       }finally{ postBtn.disabled = false; }
     }
 
-    // --- Realtime: posts, replies, reports, reactions, deletes
+    // --- Realtime: posts, replies, reports, reactions, deletes ---
     async function subscribeRealtime(){
       sb.channel('threadless_posts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
           const row = payload.new;
-          if (!shouldRender(row)) return;
+          if (!shouldRenderPost(row)) return;
           const node = renderPost(row);
           if (node) { feedEl.prepend(node); hydrateReactions([row.id]); }
         })
@@ -953,7 +1016,8 @@ const FALLBACK_BAD = [
       sb.channel('threadless_replies')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
           const r = payload.new;
-          if (SHOW_MATURE || !rowIsMature(r)){
+          // FIX: Use reply maturity logic specifically, not the posts flag.
+          if (shouldRenderReply(r)){
             const wrap = document.getElementById(`replies_${r.post_id}`);
             if (wrap){
               const node = renderReply(r);
@@ -989,4 +1053,3 @@ const FALLBACK_BAD = [
   </script>
 </body>
 </html>
-
