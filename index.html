@@ -764,10 +764,11 @@
       if (!SHOW_MATURE && HAS_MATURE_POSTS) q = q.eq('mature', false);
 
       if (cursor){
-        const cts = encodeURIComponent(cursor.created_at);
-        const cid = encodeURIComponent(cursor.id);
-        q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
-      }
+  const cts = cursor.created_at; // use raw ISO timestamp
+  const cid = cursor.id;
+  q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
+}
+
 
       const { data, error, status } = await q;
 
@@ -1090,3 +1091,4 @@
   </script>
 </body>
 </html>
+
