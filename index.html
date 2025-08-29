@@ -20,8 +20,9 @@
 
 <!-- Favicon -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230e1613'/%3E%3Cpath d='M16 20h32M16 32h32M16 44h32' stroke='%23ff8b3d' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+
 <style>
-  /* === Themes === */
+  /* === Theme tokens === */
   :root{
     --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27;
     --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d; --warn:#ffd08f; --bad:#ff8c8c;
@@ -29,7 +30,6 @@
   [data-theme="forest"]{ --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27; --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d; --warn:#ffd08f }
   [data-theme="sunset"]{ --bg:#160f12; --card:#22161b; --ink:#ffeef3; --muted:#c5a7b3; --line:#2d1e25; --accent:#ff6b6b; --accent-2:#ffb86b; --accent-2-ink:#2b130f; --warn:#ffe0b5 }
   [data-theme="midnight"]{ --bg:#0d0f19; --card:#121427; --ink:#e9ebff; --muted:#a9b0d4; --line:#1a1d36; --accent:#8ab4ff; --accent-2:#6ae6c1; --accent-2-ink:#021410; --warn:#ffd9a3 }
-  /* Extra themes */
   [data-theme="ocean"]{ --bg:#07171d; --card:#0d2330; --ink:#e6fbff; --muted:#a6c9d6; --line:#143244; --accent:#26b0ff; --accent-2:#15d1b2; --accent-2-ink:#01221c; --warn:#ffe6b8 }
   [data-theme="grape"]{ --bg:#160d1a; --card:#231128; --ink:#f6e9ff; --muted:#c7abd8; --line:#31153b; --accent:#c47dff; --accent-2:#ff9fb3; --accent-2-ink:#2b0c18; --warn:#ffe0c1 }
   [data-theme="mono"]{ --bg:#0c0c0c; --card:#141414; --ink:#f5f5f5; --muted:#bcbcbc; --line:#202020; --accent:#ffffff; --accent-2:#d0d0d0; --accent-2-ink:#121212; --warn:#ffd08f }
@@ -60,7 +60,6 @@
   .theme-switch{ display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px }
   .theme-select{ appearance:none; border:1px solid var(--line); background:var(--card); color:var(--ink); border-radius:10px; padding:6px 10px; cursor:pointer }
 
-  /* Mature toggle */
   .switch{display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12px}
   .switch input{ width:16px; height:16px; cursor:pointer }
 
@@ -139,7 +138,7 @@
             </select>
           </div>
 
-          <!-- Mature content global toggle -->
+          <!-- Mature content toggle -->
           <label class="switch" title="Show posts & replies that include slurs/explicit/violent/extremist terms">
             <input type="checkbox" id="matureToggle" />
             Show mature
@@ -170,7 +169,6 @@
 
     <section class="feed" id="feed" aria-live="polite"></section>
 
-    <!-- Pagination -->
     <div class="pager">
       <button class="load-more" id="loadMoreBtn">
         <span class="spinner" id="moreSpin" style="display:none"></span>
@@ -188,59 +186,184 @@
 
   <!-- Supabase client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
+
+  <!-- === MODULES (split by clear sections; safe to edit individually) === -->
   <script>
-    'use strict';
-    // --- Supabase keys (yours) ---
-    const SUPABASE_URL = "https://hqwerxoapoczigetylfj.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhxd2VyeG9hcG9jemlnZXR5bGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNTIyNTQsImV4cCI6MjA3MTgyODI1NH0.-MGwuD5NzuHo23GrYD-GsSdeGKoVh_ggDGqp0v7eXoo";
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  'use strict';
 
-    // --- UI refs ---
-    const statusEl = document.getElementById('status');
-    const textEl   = document.getElementById('text');
-    const postBtn  = document.getElementById('postBtn');
-    const feedEl   = document.getElementById('feed');
-    const countEl  = document.getElementById('count');
-    const coolEl   = document.getElementById('cool');
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
-    const moreSpin = document.getElementById('moreSpin');
-    const moreLabel = document.getElementById('moreLabel');
-    const themeSel = document.getElementById('theme');
-    const meFlairEl= document.getElementById('meFlair');
-    const toastEl  = document.getElementById('toast');
-    const matureToggle = document.getElementById('matureToggle');
+  /* ============================================================
+   * [MODULE A] CONFIG / STATE
+   * ============================================================ */
+  const TL = window.TL = {
+    VERSION: 'alpha-modular-1.0.0',
 
-    // --- Settings/state ---
-    const COOLDOWN_SEC = 15;
-    const PAGE_SIZE = 30;
-    let SOURCE = 'posts_public'; // will auto-fallback to 'posts' if missing
-    let HAS_FLAIR = true;                 // posts/replies may have flair
-    let HAS_MATURE_POSTS = true;          // posts.mature column exists?
-    let HAS_MATURE_REPLIES = true;        // replies.mature column exists?
-    let REACTIONS_AVAILABLE = true;       // reactions table exists?
-    let nextCursor = null; // { created_at, id }
-    const seen = new Set(); // post ids rendered
+    // Supabase
+    SUPABASE_URL: "https://hqwerxoapoczigetylfj.supabase.co",
+    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhxd2VyeG9hcG9jemlnZXR5bGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYyNTIyNTQsImV4cCI6MjA3MTgyODI1NH0.-MGwuD5NzuHo23GrYD-GsSdeGKoVh_ggDGqp0v7eXoo",
+    sb: null,
 
-    // Track parent post maturity for reply gating
-    const POST_MATURE = new Map(); // post_id -> boolean
+    // Feature flags
+    COOLDOWN_SEC: 15,
+    PAGE_SIZE: 30,
+    SOURCE: 'posts_public',     // fallback to 'posts' if not present
+    HAS_FLAIR: true,
+    HAS_MATURE_POSTS: true,
+    HAS_MATURE_REPLIES: true,
+    REACTIONS_AVAILABLE: true,
 
-    // --- Mature visibility preference ---
-    let SHOW_MATURE = (localStorage.getItem('threadless_show_mature') === '1');
-    matureToggle.checked = SHOW_MATURE;
-    matureToggle.addEventListener('change', ()=>{
-      SHOW_MATURE = matureToggle.checked;
-      localStorage.setItem('threadless_show_mature', SHOW_MATURE ? '1' : '0');
-      reloadFeed();
-    });
+    // UI refs (wired in boot)
+    els: {},
 
-    // --- Security/normalization helpers ---
+    // Pagination
+    nextCursor: null,           // { created_at, id }
+    seen: new Set(),
+    POST_MATURE: new Map(),     // parent-post maturity lookup
+
+    // User prefs
+    SHOW_MATURE: (localStorage.getItem('threadless_show_mature') === '1'),
+
+    // Hooks for you:
+    setShowMature(v){
+      TL.SHOW_MATURE = !!v;
+      try { localStorage.setItem('threadless_show_mature', v ? '1':'0'); } catch {}
+      TL.actions.reloadFeed();
+    },
+    updateBadWords(extra){ TL.safety.mergeBadWords(extra); },
+    refresh(){ TL.actions.reloadFeed(); },
+  };
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE B] DOM / UTILS
+   * ============================================================ */
+  TL.util = (function(){
+    const $ = id => document.getElementById(id);
+    const els = {
+      status: $('status'),
+      text: $('text'),
+      postBtn: $('postBtn'),
+      feed: $('feed'),
+      count: $('count'),
+      cool: $('cool'),
+      loadMoreBtn: $('loadMoreBtn'),
+      moreSpin: $('moreSpin'),
+      moreLabel: $('moreLabel'),
+      theme: $('theme'),
+      meFlair: $('meFlair'),
+      toast: $('toast'),
+      matureToggle: $('matureToggle'),
+      rerollBtn: $('rerollBtn')
+    };
+    TL.els = els;
+
     const ZERO_WIDTH = /[\u200B-\u200D\uFEFF]/g;
     const DEOB = {'1':'i','!':'i','|':'i','@':'a','4':'a','$':'s','3':'e','0':'o','7':'t','5':'s','8':'b'};
-    const deobfuscate = s => s.replace(/[1!|@4$30 75 8]/g, ch => DEOB[ch] ?? ch);
-    const canonical = s => deobfuscate((s||'').normalize('NFKC').replace(ZERO_WIDTH,'')).toLowerCase().trim();
 
-    // --- Stronger fuzzy detector with fewer false positives ---
+    function deobfuscate(s){ return s.replace(/[1!|@4$30 75 8]/g, ch => DEOB[ch] ?? ch); }
+    function canonical(s){
+      return deobfuscate((s||'').normalize('NFKC').replace(ZERO_WIDTH,'')).toLowerCase().trim();
+    }
+
     const SEP = /[^a-z0-9]+/g;
+    const sleep = ms => new Promise(r=>setTimeout(r,ms));
+    const nowSec = ()=>Math.floor(Date.now()/1000);
+    function getCooldownLeft(){
+      const last = Number(localStorage.getItem('lastPostTs')||'0');
+      return Math.max(0,(last+TL.COOLDOWN_SEC)-nowSec());
+    }
+    function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
+    function sanitize(s){ return (s||'').trim(); }
+    function toast(msg){ els.toast.textContent = msg; els.toast.style.display='block'; setTimeout(()=>els.toast.style.display='none', 1600); }
+    function showStatus(msg){ els.status.textContent = msg; }
+
+    // Theme
+    const savedTheme = localStorage.getItem('threadless_theme') || 'forest';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    return {
+      $, els, canonical, SEP, sleep, nowSec, getCooldownLeft, setJustPosted, sanitize, toast, showStatus
+    };
+  })();
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE C] SAFETY (regex + fuzzy)
+   *  - Tuning knobs at the top
+   * ============================================================ */
+  TL.safety = (function(){
+    const { canonical, SEP } = TL.util;
+
+    // === Tuning (safe defaults) ===
+    const FUZZY_CORE = [
+      'fuck','shit','ass','asshole','bastard','motherfucker','bullshit',
+      'bitch','prick','twat','wanker','bollocks','bugger','goddamn','damn',
+      'dick','cock','pussy','cunt','tits','boobs',
+      'retard','fag','faggot','dyke','tranny'
+    ];
+    const TOKEN_MAX_EDIT = 1;  // allow 1 edit distance per token
+    const JOINED_MIN_LEN = 4;  // avoid short roots like "ass" matching "assume"
+    const JOINED_MAX_EDIT = 1; // 1 edit distance for sliding checks
+
+    // === Fallback bad list (curated) ===
+    let BAD_WORDS = [
+      // slurs (examples; keep server list as source of truth)
+      {word:'nigger', category:'slur'},
+      {word:'nigga', category:'slur'},
+      {word:'coon', category:'slur'},
+      {word:'chink', category:'slur'},
+      {word:'gook', category:'slur'},
+      {word:'spic', category:'slur'},
+      {word:'kike', category:'slur'},
+      {word:'tranny', category:'slur'},
+      {word:'faggot', category:'slur'},
+      {word:'dyke', category:'slur'},
+      {word:'retard', category:'slur'},
+      // extremism
+      {word:'nazi', category:'extremist'},
+      {word:'neo-nazi', category:'extremist'},
+      {word:'heil hitler', category:'extremist'},
+      {word:'sieg heil', category:'extremist'},
+      {word:'third reich', category:'extremist'},
+      {word:'swastika', category:'extremist'},
+      {word:'kkk', category:'extremist'},
+      {word:'white power', category:'extremist'},
+      {word:'1488', category:'extremist'},
+      {word:'14 words', category:'extremist'},
+      {word:'blood and soil', category:'extremist'},
+      // threats/violence/self-harm
+      {word:'kill yourself', category:'self-harm'},
+      {word:'kys', category:'self-harm'},
+      {word:'suicide', category:'self-harm'},
+      {word:'lynch', category:'violence'},
+      {word:'dox', category:'threat'},
+      {word:'swat', category:'threat'},
+      // explicit/sexual
+      {word:'rape', category:'harm'},
+      {word:'cum', category:'sexual'},
+      {word:'cock', category:'sexual'},
+      {word:'pussy', category:'sexual'},
+      {word:'cunt', category:'sexual'},
+      {word:'slut', category:'sexual'},
+      {word:'whore', category:'sexual'},
+      {word:'dick', category:'sexual'},
+      // profanity
+      {word:'fuck', category:'profanity'},
+      {word:'shit', category:'profanity'},
+      {word:'asshole', category:'profanity'},
+      {word:'bastard', category:'profanity'},
+    ];
+    let BAD_RE = null;
+
+    function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    function rebuildBadRegex(){
+      const words = [...new Set((BAD_WORDS||[]).map(x => (x.word||'').trim()).filter(Boolean))]
+        .map(escapeRegExp).sort((a,b)=>b.length-a.length);
+      BAD_RE = words.length ? new RegExp("\\b(?:"+words.join("|")+")\\b","i") : null;
+    }
+
+    // Fuzzy helpers
     function collapseRepeats(s){ return s.replace(/([a-z0-9])\1{2,}/g, '$1$1'); }
     function tokensForFuzzy(s){
       const base = collapseRepeats(canonical(s));
@@ -262,313 +385,149 @@
       }
       return dp[n];
     }
-    const FUZZY_CORE = [
-      'fuck','shit','ass','asshole','bastard','motherfucker','bullshit',
-      'bitch','prick','twat','wanker','bollocks','bugger','goddamn','damn',
-      'dick','cock','pussy','cunt','tits','boobs',
-      'retard','fag','faggot','dyke','tranny'
-    ];
+
     function fuzzyBad(text){
       const { tokens, joined } = tokensForFuzzy(text);
       if (!tokens.length && !joined) return false;
 
-      function tokenHit(base){
-        const maxEd = 1, bl = base.length;
-        for (const t of tokens){
-          const tl = t.length;
-          // keep token-level reasonably close in length
-          if (Math.abs(tl - bl) > 2) continue;
-          if (lev(t, base) <= maxEd) return true;
-        }
-        return false;
-      }
-
-      function joinedHit(base){
-        // To prevent "ass" -> "assume" false positives:
-        // Only do sliding-window checks for bases length >= 4.
-        if (base.length < 4) return false;
-        const maxEd = 1, bl = base.length;
-        const minL = Math.max(4, bl - 1), maxL = Math.min(bl + 2, joined.length);
-        for (let L=minL; L<=maxL; L++){
-          for (let i=0; i+L<=joined.length; i++){
-            if (lev(joined.slice(i,i+L), base) <= maxEd) return true;
-          }
-        }
-        return false;
-      }
-
+      // token-level edits
       for (const base of FUZZY_CORE){
-        if (tokenHit(base)) return true;
-        if (joined && joinedHit(base)) return true;
+        const bl = base.length;
+        for (const t of tokens){
+          if (Math.abs(t.length - bl) > 2) continue;
+          if (lev(t, base) <= TOKEN_MAX_EDIT) return true;
+        }
       }
 
-      // Light phonetic normalizations for obfuscations like "phuk", "fucc", "f*ck"
-      const joinedLite = joined
-        .replace(/\*/g,'')
-        .replace(/ph/g,'f')
-        .replace(/q/g,'k')
-        .replace(/ck/g,'k')
-        .replace(/x/g,'ks');
+      // joined sliding window, avoid short roots
+      if (joined){
+        const joinedLite = joined
+          .replace(/\*/g,'')
+          .replace(/ph/g,'f')
+          .replace(/q/g,'k')
+          .replace(/ck/g,'k')
+          .replace(/x/g,'ks');
 
-      if (joinedLite){
-        for (const base of FUZZY_CORE){
-          if (base.length < 4) continue; // same safeguard for short roots
-          const bl = base.length, minL = Math.max(4, bl-1), maxL = Math.min(bl+2, joinedLite.length);
-          for (let L=minL; L<=maxL; L++){
-            for (let i=0; i+L<=joinedLite.length; i++){
-              if (lev(joinedLite.slice(i,i+L), base) <= 1) return true;
+        const scanIn = (hay) => {
+          for (const base of FUZZY_CORE){
+            if (base.length < JOINED_MIN_LEN) continue;
+            const bl = base.length;
+            const minL = Math.max(JOINED_MIN_LEN, bl-1), maxL = Math.min(bl+2, hay.length);
+            for (let L=minL; L<=maxL; L++){
+              for (let i=0; i+L<=hay.length; i++){
+                if (lev(hay.slice(i,i+L), base) <= JOINED_MAX_EDIT) return true;
+              }
             }
           }
-        }
+          return false;
+        };
+
+        if (scanIn(joined)) return true;
+        if (scanIn(joinedLite)) return true;
       }
       return false;
     }
 
-    // --- Bad-words cache (from DB) + expanded fallback ---
-    let BAD_WORDS = []; // [{word, category}, ...]
-    let BAD_RE = null;
-
-    const FALLBACK_BAD = [
-      /* (expanded list you already shipped; trimmed here for brevity) */
-      {word:'nigger', category:'slur'},
-      {word:'nigga', category:'slur'},
-      {word:'coon', category:'slur'},
-      {word:'porch monkey', category:'slur'},
-      {word:'jigaboo', category:'slur'},
-      {word:'sambo', category:'slur'},
-      {word:'pickaninny', category:'slur'},
-      {word:'tar baby', category:'slur'},
-      {word:'chink', category:'slur'},
-      {word:'gook', category:'slur'},
-      {word:'zipperhead', category:'slur'},
-      {word:'slant', category:'slur'},
-      {word:'ching chong', category:'slur'},
-      {word:'spic', category:'slur'},
-      {word:'beaner', category:'slur'},
-      {word:'wetback', category:'slur'},
-      {word:'cholo', category:'slur'},
-      {word:'kike', category:'slur'},
-      {word:'yid', category:'slur'},
-      {word:'paki', category:'slur'},
-      {word:'raghead', category:'slur'},
-      {word:'sand nigger', category:'slur'},
-      {word:'gypsy', category:'slur'},
-      {word:'pikey', category:'slur'},
-      {word:'abo', category:'slur'},
-      {word:'boong', category:'slur'},
-      {word:'cracker', category:'slur'},
-      {word:'honky', category:'slur'},
-      {word:'white trash', category:'slur'},
-      {word:'faggot', category:'slur'},
-      {word:'fag', category:'slur'},
-      {word:'dyke', category:'slur'},
-      {word:'shemale', category:'slur'},
-      {word:'tranny', category:'slur'},
-      {word:'homo', category:'slur'},
-      {word:'butt pirate', category:'slur'},
-      {word:'retard', category:'slur'},
-      {word:'spaz', category:'slur'},
-      {word:'mongoloid', category:'slur'},
-      {word:'cripple', category:'slur'},
-      {word:'downie', category:'slur'},
-      {word:'autist', category:'slur'},
-      {word:'bitch', category:'harassment'},
-      {word:'whore', category:'sexual'},
-      {word:'slut', category:'sexual'},
-      {word:'thot', category:'sexual'},
-      {word:'skank', category:'sexual'},
-      {word:'cunt', category:'sexual'},
-      {word:'prick', category:'harassment'},
-      {word:'twat', category:'harassment'},
-      {word:'douchebag', category:'harassment'},
-      {word:'douche', category:'harassment'},
-      {word:'nonce', category:'harassment'},
-      {word:'nazi', category:'extremist'},
-      {word:'neo-nazi', category:'extremist'},
-      {word:'heil hitler', category:'extremist'},
-      {word:'hail hitler', category:'extremist'},
-      {word:'sieg heil', category:'extremist'},
-      {word:'third reich', category:'extremist'},
-      {word:'swastika', category:'extremist'},
-      {word:'kkk', category:'extremist'},
-      {word:'white power', category:'extremist'},
-      {word:'white pride', category:'extremist'},
-      {word:'1488', category:'extremist'},
-      {word:'14 words', category:'extremist'},
-      {word:'wpww', category:'extremist'},
-      {word:'blood and soil', category:'extremist'},
-      {word:'great replacement', category:'extremist'},
-      {word:'holohoax', category:'extremist'},
-      {word:'holocaust denial', category:'extremist'},
-      {word:'rahowa', category:'extremist'},
-      {word:'atomwaffen', category:'extremist'},
-      {word:'kill yourself', category:'self-harm'},
-      {word:'kys', category:'self-harm'},
-      {word:'hang yourself', category:'self-harm'},
-      {word:'self-harm', category:'self-harm'},
-      {word:'suicide', category:'self-harm'},
-      {word:'cut myself', category:'self-harm'},
-      {word:'overdose', category:'self-harm'},
-      {word:'od', category:'self-harm'},
-      {word:'dox', category:'threat'},
-      {word:'swat', category:'threat'},
-      {word:'i will kill you', category:'threat'},
-      {word:'die bitch', category:'threat'},
-      {word:'lynch', category:'violence'},
-      {word:'gas chamber', category:'violence'},
-      {word:'rape', category:'harm'},
-      {word:'rapist', category:'harm'},
-      {word:'molest', category:'harm'},
-      {word:'groomer', category:'harm'},
-      {word:'pedophile', category:'harm'},
-      {word:'paedophile', category:'harm'},
-      {word:'pedo', category:'harm'},
-      {word:'cp', category:'harm'},
-      {word:'loli', category:'sexual'},
-      {word:'lolita', category:'sexual'},
-      {word:'incest', category:'sexual'},
-      {word:'bestiality', category:'sexual'},
-      {word:'zoophilia', category:'sexual'},
-      {word:'necrophilia', category:'sexual'},
-      {word:'cum', category:'sexual'},
-      {word:'cumshot', category:'sexual'},
-      {word:'jizz', category:'sexual'},
-      {word:'jism', category:'sexual'},
-      {word:'semen', category:'sexual'},
-      {word:'cock', category:'sexual'},
-      {word:'dick', category:'sexual'},
-      {word:'penis', category:'sexual'},
-      {word:'pussy', category:'sexual'},
-      {word:'vagina', category:'sexual'},
-      {word:'tits', category:'sexual'},
-      {word:'boobs', category:'sexual'},
-      {word:'nipple', category:'sexual'},
-      {word:'ass', category:'profanity'},
-      {word:'asshole', category:'profanity'},
-      {word:'arse', category:'profanity'},
-      {word:'buttplug', category:'sexual'},
-      {word:'butt plug', category:'sexual'},
-      {word:'anal', category:'sexual'},
-      {word:'rimjob', category:'sexual'},
-      {word:'blowjob', category:'sexual'},
-      {word:'handjob', category:'sexual'},
-      {word:'deepthroat', category:'sexual'},
-      {word:'facial', category:'sexual'},
-      {word:'milf', category:'sexual'},
-      {word:'gilf', category:'sexual'},
-      {word:'hentai', category:'sexual'},
-      {word:'futanari', category:'sexual'},
-      {word:'nsfw', category:'sexual'},
-      {word:'onlyfans', category:'sexual'},
-      {word:'porn', category:'sexual'},
-      {word:'porno', category:'sexual'},
-      {word:'xxx', category:'sexual'},
-      {word:'fuck', category:'profanity'},
-      {word:'fucking', category:'profanity'},
-      {word:'motherfucker', category:'profanity'},
-      {word:'mf', category:'profanity'},
-      {word:'shit', category:'profanity'},
-      {word:'bullshit', category:'profanity'},
-      {word:'bastard', category:'profanity'},
-      {word:'goddamn', category:'profanity'},
-      {word:'damn', category:'profanity'},
-      {word:'piss', category:'profanity'},
-      {word:'wanker', category:'profanity'},
-      {word:'bollocks', category:'profanity'},
-      {word:'bugger', category:'profanity'},
-      {word:'gore', category:'nsfl'},
-      {word:'snuff', category:'nsfl'},
-      {word:'dismember', category:'nsfl'},
-      {word:'beheading', category:'nsfl'},
-      {word:'decapitation', category:'nsfl'},
-      {word:'disembowel', category:'nsfl'},
-    ];
-
-    const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    function rebuildBadRegex(){
-      const words = [...new Set((BAD_WORDS||[]).map(x => (x.word||'').trim()).filter(Boolean))]
-        .map(escapeRegExp)
-        .sort((a,b)=>b.length-a.length);
-      BAD_RE = words.length ? new RegExp("\\b(?:"+words.join("|")+")\\b","i") : null;
-    }
-    async function loadBadWords(){
-      const { data, error } = await sb.from('bad_words').select('word, category');
+    // Public API
+    async function loadFromDB(){
+      const { data, error } = await TL.sb.from('bad_words').select('word, category');
       if (!error && data){
-        const seenW = new Set();
-        BAD_WORDS = [...data, ...FALLBACK_BAD].filter(({word})=>{
+        const seen = new Set();
+        BAD_WORDS = [...data, ...BAD_WORDS].filter(({word})=>{
           const w = (word||'').toLowerCase();
-          if (seenW.has(w)) return false; seenW.add(w); return true;
+          if (seen.has(w)) return false; seen.add(w); return true;
         });
-      } else {
-        BAD_WORDS = FALLBACK_BAD;
       }
       rebuildBadRegex();
     }
-    const matchesBadWord = t => (BAD_RE && BAD_RE.test(canonical(t))) || fuzzyBad(t);
-    const needsNudge   = text => matchesBadWord(text);
-    const isMatureText = text => matchesBadWord(text);
+    function mergeBadWords(extra){
+      if (!Array.isArray(extra)) return;
+      BAD_WORDS.push(...extra);
+      rebuildBadRegex();
+    }
+    function matchesBadWord(t){ return (BAD_RE && BAD_RE.test(canonical(t))) || fuzzyBad(t); }
+    const needsNudge = (text)=>matchesBadWord(text);
+    const isMatureText = (text)=>matchesBadWord(text);
 
-    // --- Flair/session tag ---
+    return { loadFromDB, mergeBadWords, matchesBadWord, needsNudge, isMatureText };
+  })();
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE D] SESSION / THEME / TAG
+   * ============================================================ */
+  TL.session = (function(){
+    const { els } = TL.util;
     function makeTag(){
       const adjectives = ['Fern','Drift','Quiet','Copper','Ivory','Moss','Amber','Silent','Swift','Velvet','Solar','Arctic','Cinder','Echo','Prairie','Crimson','Sable','Verdant','Golden','Nimbus','Boreal','Saffron','Umber'];
       const animals    = ['Fox','Lynx','Whale','Otter','Hawk','Badger','Moth','Panda','Crane','Fennec','Stag','Koi','Raven','Viper','Wren','Wolf','Heron','Bison','Ocelot','Orca','Tern','Ibex','Dingo'];
       const a = adjectives[Math.floor(Math.random()*adjectives.length)];
       const b = animals[Math.floor(Math.random()*animals.length)];
-      const num = Math.floor(Math.random()*89)+11; // 11..99
+      const num = Math.floor(Math.random()*89)+11;
       return `${a}-${b}·${num}`;
     }
     let SESSION_TAG = makeTag();
-    meFlairEl.textContent = SESSION_TAG;
+    els.meFlair.textContent = SESSION_TAG;
     try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
+
     function rerollTag(){
       SESSION_TAG = makeTag();
-      meFlairEl.textContent = SESSION_TAG;
+      els.meFlair.textContent = SESSION_TAG;
       try { sessionStorage.setItem('threadless_session_tag', SESSION_TAG); } catch {}
-      toast('New anon flair!');
+      TL.util.toast('New anon flair!');
     }
-    document.getElementById('rerollBtn').addEventListener('click', rerollTag);
 
-    // --- Theme handling ---
     const savedTheme = localStorage.getItem('threadless_theme') || 'forest';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    themeSel.value = savedTheme;
-    themeSel.addEventListener('change', ()=>{
-      document.documentElement.setAttribute('data-theme', themeSel.value);
-      localStorage.setItem('threadless_theme', themeSel.value);
+    TL.util.$('theme').value = savedTheme;
+    TL.util.$('theme').addEventListener('change', ()=>{
+      document.documentElement.setAttribute('data-theme', TL.util.$('theme').value);
+      localStorage.setItem('threadless_theme', TL.util.$('theme').value);
     });
 
-    // --- Helpers ---
-    const sleep = ms=>new Promise(r=>setTimeout(r,ms));
-    const nowSec = ()=>Math.floor(Date.now()/1000);
-    function getCooldownLeft(){ const last = Number(localStorage.getItem('lastPostTs')||'0'); return Math.max(0,(last+COOLDOWN_SEC)-nowSec()); }
-    function setJustPosted(){ localStorage.setItem('lastPostTs', String(nowSec())); }
-    function sanitize(s){ return (s||'').trim(); }
-    function toast(msg){ toastEl.textContent = msg; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none', 1600); }
-    function showStatus(msg){ statusEl.textContent = msg; }
+    return { get tag(){ return SESSION_TAG; }, rerollTag };
+  })();
+  </script>
 
-    // --- Visibility helpers (separate flags for posts vs replies) ---
-    const rowIsMaturePost = row => {
-      if (HAS_MATURE_POSTS && typeof row.mature === 'boolean') return row.mature === true;
+  <script>
+  /* ============================================================
+   * [MODULE E] VISIBILITY LOGIC
+   * ============================================================ */
+  TL.visibility = (function(){
+    const { isMatureText } = TL.safety;
+
+    function rowIsMaturePost(row){
+      if (TL.HAS_MATURE_POSTS && typeof row.mature === 'boolean') return row.mature === true;
       return isMatureText(row.content || '');
-    };
-    const rowIsMatureReply = row => {
-      if (HAS_MATURE_REPLIES && typeof row.mature === 'boolean') return row.mature === true;
+    }
+    function rowIsMatureReply(row){
+      if (TL.HAS_MATURE_REPLIES && typeof row.mature === 'boolean') return row.mature === true;
       return isMatureText(row.content || '');
-    };
-    function shouldRenderPost(row){ return SHOW_MATURE || !rowIsMaturePost(row); }
-    function parentIsMature(post_id){ return !!POST_MATURE.get(post_id); }
+    }
+    function shouldRenderPost(row){ return TL.SHOW_MATURE || !rowIsMaturePost(row); }
+    function parentIsMature(post_id){ return !!TL.POST_MATURE.get(post_id); }
     function shouldRenderReply(row){
-      // If mature off, only show a reply when BOTH the reply and its parent are non-mature.
-      if (SHOW_MATURE) return true;
-      if (parentIsMature(row.post_id)) return false;
-      return !rowIsMatureReply(row);
+      if (TL.SHOW_MATURE) return true;
+      if (parentIsMature(row.post_id)) return false; // hide replies under a mature post
+      return !rowIsMatureReply(row);                 // allow only clean replies under clean post
     }
 
-    // --- Render: reactions/report row ---
+    return { rowIsMaturePost, rowIsMatureReply, shouldRenderPost, shouldRenderReply, parentIsMature };
+  })();
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE F] RENDERING
+   * ============================================================ */
+  TL.render = (function(){
+    const { els } = TL.util;
+    const { shouldRenderPost, rowIsMaturePost, rowIsMatureReply, shouldRenderReply, parentIsMature } = TL.visibility;
+
     function emojiRow(post){
       const wrap = document.createElement('div');
       wrap.className = 'actions';
-      if (!REACTIONS_AVAILABLE) { wrap.style.display = 'none'; return wrap; }
+      if (!TL.REACTIONS_AVAILABLE) { wrap.style.display = 'none'; return wrap; }
       const emojis = [
         {key:'up',    label:'🔼'},
         {key:'down',  label:'🔽'},
@@ -581,25 +540,23 @@
         btn.className = 'emoji';
         btn.dataset.key = key;
         btn.innerHTML = `<span>${label}</span> <span class="count" id="c_${post.id}_${key}">0</span>`;
-        btn.addEventListener('click', ()=>react(post.id, key, btn));
+        btn.addEventListener('click', ()=>TL.data.react(post.id, key, btn));
         wrap.appendChild(btn);
       });
       const reportBtn = document.createElement('button');
       reportBtn.className = 'report';
       reportBtn.textContent = 'Report';
       reportBtn.title = 'Report this post';
-      reportBtn.addEventListener('click', ()=>report(post.id));
+      reportBtn.addEventListener('click', ()=>TL.data.report(post.id));
       wrap.appendChild(reportBtn);
       return wrap;
     }
 
-    // --- Replies: renderer + composer ---
     function repliesSection(post){
       const box = document.createElement('div');
       box.className = 'replies';
       box.id = `replies_${post.id}`;
 
-      // Compose UI
       const rbox = document.createElement('div');
       rbox.className = 'replybox';
       const ta = document.createElement('textarea');
@@ -608,7 +565,7 @@
       const btn = document.createElement('button');
       btn.className = 'btn rbtn';
       btn.textContent = 'Reply';
-      btn.addEventListener('click', ()=>sendReply(post.id, ta));
+      btn.addEventListener('click', ()=>TL.actions.sendReply(post.id, ta));
       ta.addEventListener('keydown', (e)=>{
         if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); btn.click(); }
       });
@@ -624,7 +581,7 @@
       el.dataset.id = row.id;
       const head = document.createElement('div');
       head.className = 'rhead';
-      const f = document.createElement('span'); f.className = 'rflair'; f.textContent = row.flair || 'anon';
+      const f = document.createElement('span'); f.className = 'rflair'; f.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
       const dot = document.createElement('span'); dot.textContent = '·';
       const t = document.createElement('span'); t.textContent = new Date(row.created_at).toLocaleString();
       head.append(f, dot, t);
@@ -634,15 +591,13 @@
       return el;
     }
 
-    // --- Post renderer
     function renderPost(row){
-      // Store parent maturity for downstream gating of replies
       const isMat = rowIsMaturePost(row);
-      POST_MATURE.set(row.id, isMat);
+      TL.POST_MATURE.set(row.id, isMat);
 
       if (!shouldRenderPost(row)) return null;
-      if (seen.has(row.id)) return null;
-      seen.add(row.id);
+      if (TL.seen.has(row.id)) return null;
+      TL.seen.add(row.id);
 
       const el = document.createElement('div');
       el.className = 'post';
@@ -652,7 +607,7 @@
       head.className = 'headerline';
       const flair = document.createElement('span');
       flair.className = 'flair';
-      flair.textContent = (HAS_FLAIR && row.flair) ? row.flair : 'anon';
+      flair.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
       const dot = document.createElement('span'); dot.textContent = '·';
       const time = document.createElement('span'); time.className = 'time';
       time.textContent = new Date(row.created_at).toLocaleString();
@@ -673,15 +628,13 @@
       if (!rows.length) return;
       const frag = document.createDocumentFragment();
       for (const r of rows){
-        // store parent maturity even if we end up not rendering due to toggle
-        POST_MATURE.set(r.id, rowIsMaturePost(r));
+        TL.POST_MATURE.set(r.id, rowIsMaturePost(r)); // store even if not rendering due to toggle
         const node = renderPost(r);
         if (node) frag.appendChild(node);
       }
-      if (prepend) feedEl.prepend(frag); else feedEl.appendChild(frag);
+      if (prepend) TL.els.feed.prepend(frag); else TL.els.feed.appendChild(frag);
     }
 
-    // --- Replies: bulk helpers ---
     function groupBy(arr, key) {
       const m = new Map();
       for (const item of arr) {
@@ -691,160 +644,39 @@
       }
       return m;
     }
+
     function renderRepliesBatch(groups) {
       for (const [post_id, rows] of groups.entries()) {
         const wrap = document.getElementById(`replies_${post_id}`);
         if (!wrap) continue;
-        // remove old rendered replies (keep composer = last child)
         [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
-        // If parent is mature and mature toggle is OFF, skip drawing replies entirely
-        const parentMat = parentIsMature(post_id);
+
+        const parentMat = TL.visibility.parentIsMature(post_id);
         for (const r of rows) {
-          if (SHOW_MATURE || (!parentMat && !rowIsMatureReply(r))) {
+          if (TL.SHOW_MATURE || (!parentMat && !TL.visibility.rowIsMatureReply(r))) {
             wrap.insertBefore(renderReply(r), wrap.lastChild);
           }
         }
       }
     }
 
-    async function loadRepliesForPosts(postIds){
-      if (!postIds.length) return;
-      let q = sb.from('replies')
-        .select(HAS_MATURE_REPLIES ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
-        .in('post_id', postIds)
-        .order('post_id', { ascending: true })
-        .order('created_at', { ascending: true });
+    return { emojiRow, renderReply, renderPost, appendRows, groupBy, renderRepliesBatch };
+  })();
+  </script>
 
-      if (HAS_MATURE_REPLIES && !SHOW_MATURE) q = q.eq('mature', false);
-
-      const { data, error, status } = await q;
-
-      if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
-        if (HAS_MATURE_REPLIES){ HAS_MATURE_REPLIES = false; return loadRepliesForPosts(postIds); }
-      }
-      if (error) { console.warn('replies bulk load error', error); return; }
-
-      const grouped = groupBy(data || [], 'post_id');
-      renderRepliesBatch(grouped);
-    }
-
-    async function loadReplies(post_id){
-      let q = sb.from('replies')
-        .select(HAS_MATURE_REPLIES ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
-        .eq('post_id', post_id)
-        .order('created_at', { ascending: true })
-        .limit(200);
-
-      if (HAS_MATURE_REPLIES && !SHOW_MATURE) q = q.eq('mature', false);
-
-      const { data, error, status } = await q;
-
-      if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
-        if (HAS_MATURE_REPLIES){ HAS_MATURE_REPLIES = false; return loadReplies(post_id); }
-      }
-      if (error){ console.warn('replies load error', error); return; }
-
-      const m = new Map([[post_id, data || []]]);
-      renderRepliesBatch(m);
-    }
-
-    // --- Pagination (with source + flair + mature fallback) ---
-    async function fetchPage(cursor){
-      const baseFields =
-        'id, content, created_at'
-        + (HAS_FLAIR ? ', flair' : '')
-        + (HAS_MATURE_POSTS ? ', mature' : '');
-
-      let q = sb.from(SOURCE)
-        .select(baseFields)
-        .order('created_at', { ascending:false })
-        .order('id', { ascending:false })
-        .limit(PAGE_SIZE);
-
-      if (!SHOW_MATURE && HAS_MATURE_POSTS) q = q.eq('mature', false);
-
-      if (cursor){
-  const cts = cursor.created_at; // use raw ISO timestamp
-  const cid = cursor.id;
-  q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
-}
-
-
-      const { data, error, status } = await q;
-
-      if ((status === 404 && SOURCE === 'posts_public') ||
-          (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
-        SOURCE = 'posts'; showStatus('fallback'); return fetchPage(cursor);
-      }
-
-      if (status === 400 || (error && (error.code === '42703'))){
-        if (/flair.*does not exist/i.test(error.message||'')) { if (HAS_FLAIR){ HAS_FLAIR = false; return fetchPage(cursor);} }
-        if (/mature.*does not exist/i.test(error.message||'')) { if (HAS_MATURE_POSTS){ HAS_MATURE_POSTS = false; return fetchPage(cursor);} }
-      }
-
-      if (error){
-        console.error('SELECT error:', error);
-        showStatus(error.message || 'load error');
-        return { rows:[], hasMore:false, newCursor:null };
-      }
-
-      const rows = (data || []).filter(r => shouldRenderPost(r)); // client-side safety if no posts.mature
-      const last = (data || [])[ (data||[]).length - 1 ] || null;
-      const hasMore = (data||[]).length === PAGE_SIZE;
-      return { rows, hasMore, newCursor: last ? { created_at: last.created_at, id: last.id } : null };
-    }
-
-    async function initialLoad(){
-      const { rows, hasMore, newCursor } = await fetchPage(null);
-      feedEl.innerHTML = '';
-      appendRows(rows);
-      await hydrateReactions(rows.map(r=>r.id));
-      await loadRepliesForPosts(rows.map(r => r.id));
-      nextCursor = newCursor;
-      updatePager(hasMore);
-    }
-
-    function updatePager(hasMore){
-      loadMoreBtn.disabled = !hasMore;
-      moreLabel.textContent = hasMore ? 'Load more' : 'No more posts';
-    }
-    function setLoading(v){
-      loadMoreBtn.disabled = v;
-      moreSpin.style.display = v ? 'inline-block' : 'none';
-      moreLabel.textContent = v ? 'Loading…' : 'Load more';
-    }
-
-    async function loadMore(){
-      if (loadMoreBtn.disabled) return;
-      setLoading(true);
-      const { rows, hasMore, newCursor } = await fetchPage(nextCursor);
-      appendRows(rows);
-      await hydrateReactions(rows.map(r=>r.id));
-      await loadRepliesForPosts(rows.map(r => r.id));
-      nextCursor = newCursor;
-      updatePager(hasMore);
-      setLoading(false);
-    }
-
-    // --- Feed reload on toggle change ---
-    async function reloadFeed(){
-      seen.clear();
-      nextCursor = null;
-      POST_MATURE.clear();
-      feedEl.innerHTML = '';
-      await initialLoad();
-    }
-
-    // --- Reactions ---
+  <script>
+  /* ============================================================
+   * [MODULE G] DATA (Supabase queries)
+   * ============================================================ */
+  TL.data = (function(){
     async function hydrateReactions(postIds){
       const visible = postIds.filter(Boolean);
-      if (!REACTIONS_AVAILABLE || !visible.length) return;
-      const { data, error, status } = await sb.from('reactions')
-        .select('post_id, emoji')
-        .in('post_id', visible);
+      if (!TL.REACTIONS_AVAILABLE || !visible.length) return;
+      const { data, error, status } = await TL.sb.from('reactions')
+        .select('post_id, emoji').in('post_id', visible);
 
       if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
-        REACTIONS_AVAILABLE = false;
+        TL.REACTIONS_AVAILABLE = false;
         document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
         return;
       }
@@ -861,12 +693,12 @@
     }
 
     async function react(post_id, emoji, btn){
-      if (!REACTIONS_AVAILABLE) return;
+      if (!TL.REACTIONS_AVAILABLE) return;
       btn.disabled = true;
       try{
-        const { error, status } = await sb.from('reactions').insert({ post_id, session_tag: SESSION_TAG, emoji });
+        const { error, status } = await TL.sb.from('reactions').insert({ post_id, session_tag: TL.session.tag, emoji });
         if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
-          REACTIONS_AVAILABLE = false;
+          TL.REACTIONS_AVAILABLE = false;
           document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
           return;
         }
@@ -878,52 +710,199 @@
       } finally { btn.disabled = false; }
     }
 
-    // --- Reports ---
     async function report(post_id){
       if (!confirm('Report this post for moderation?')) return;
-
-      const ins = await sb.from('reports').insert({ post_id, session_tag: SESSION_TAG });
+      const ins = await TL.sb.from('reports').insert({ post_id, session_tag: TL.session.tag });
       if (ins.error){
         alert('Already reported or failed.');
         console.warn('report error', ins.error);
         return;
       }
-      const cnt = await sb.from('reports')
+      const cnt = await TL.sb.from('reports')
         .select('post_id', { count: 'exact', head: true })
         .eq('post_id', post_id);
       const total = cnt.count ?? 0;
       if (total >= 3){
         const node = document.querySelector(`.post[data-id="${post_id}"]`);
         if (node) node.remove();
-        toast('Post hidden by community');
+        TL.util.toast('Post hidden by community');
       } else {
-        toast('Reported');
+        TL.util.toast('Reported');
       }
     }
 
-    // --- Replies: send ---
+    async function insertPost(payload){
+      if (TL.HAS_FLAIR || TL.HAS_MATURE_POSTS){
+        const r1 = await TL.sb.from('posts').insert(payload);
+        if (!r1.error) return r1;
+        if (r1.error){
+          if (TL.HAS_FLAIR && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))) TL.HAS_FLAIR = false;
+          if (TL.HAS_MATURE_POSTS && (r1.error.code === '42703' || /mature.*does not exist/i.test(r1.error.message||''))) TL.HAS_MATURE_POSTS = false;
+          if (TL.HAS_FLAIR || TL.HAS_MATURE_POSTS) return insertPost({ content: payload.content });
+          return r1;
+        }
+      }
+      return TL.sb.from('posts').insert({ content: payload.content });
+    }
+
+    async function fetchPage(cursor){
+      const baseFields = 'id, content, created_at'
+        + (TL.HAS_FLAIR ? ', flair' : '')
+        + (TL.HAS_MATURE_POSTS ? ', mature' : '');
+
+      let q = TL.sb.from(TL.SOURCE)
+        .select(baseFields)
+        .order('created_at', { ascending:false })
+        .order('id', { ascending:false })
+        .limit(TL.PAGE_SIZE);
+
+      if (!TL.SHOW_MATURE && TL.HAS_MATURE_POSTS) q = q.eq('mature', false);
+
+      if (cursor){
+        // IMPORTANT: use raw ISO, not URL-encoded (fixes invalid timestamp bug)
+        const cts = cursor.created_at;
+        const cid = cursor.id;
+        q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
+      }
+
+      const { data, error, status } = await q;
+
+      if ((status === 404 && TL.SOURCE === 'posts_public') ||
+          (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
+        TL.SOURCE = 'posts'; TL.util.showStatus('fallback'); return fetchPage(cursor);
+      }
+
+      if (status === 400 || (error && (error.code === '42703'))){
+        if (/flair.*does not exist/i.test(error?.message||'')) { if (TL.HAS_FLAIR){ TL.HAS_FLAIR = false; return fetchPage(cursor);} }
+        if (/mature.*does not exist/i.test(error?.message||'')) { if (TL.HAS_MATURE_POSTS){ TL.HAS_MATURE_POSTS = false; return fetchPage(cursor);} }
+      }
+
+      if (error){
+        console.error('SELECT error:', error);
+        TL.util.showStatus(error.message || 'load error');
+        return { rows:[], hasMore:false, newCursor:null };
+      }
+
+      const rows = (data || []).filter(r => TL.visibility.shouldRenderPost(r));
+      const last = (data || [])[ (data||[]).length - 1 ] || null;
+      const hasMore = (data||[]).length === TL.PAGE_SIZE;
+      return { rows, hasMore, newCursor: last ? { created_at: last.created_at, id: last.id } : null };
+    }
+
+    async function loadRepliesForPosts(postIds){
+      if (!postIds.length) return;
+      let q = TL.sb.from('replies')
+        .select(TL.HAS_MATURE_REPLIES ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
+        .in('post_id', postIds)
+        .order('post_id', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (TL.HAS_MATURE_REPLIES && !TL.SHOW_MATURE) q = q.eq('mature', false);
+
+      const { data, error, status } = await q;
+
+      if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
+        if (TL.HAS_MATURE_REPLIES){ TL.HAS_MATURE_REPLIES = false; return loadRepliesForPosts(postIds); }
+      }
+      if (error) { console.warn('replies bulk load error', error); return; }
+
+      const grouped = TL.render.groupBy(data || [], 'post_id');
+      TL.render.renderRepliesBatch(grouped);
+    }
+
+    async function loadReplies(post_id){
+      let q = TL.sb.from('replies')
+        .select(TL.HAS_MATURE_REPLIES ? 'id, post_id, content, created_at, flair, mature' : 'id, post_id, content, created_at, flair')
+        .eq('post_id', post_id)
+        .order('created_at', { ascending: true })
+        .limit(200);
+
+      if (TL.HAS_MATURE_REPLIES && !TL.SHOW_MATURE) q = q.eq('mature', false);
+
+      const { data, error, status } = await q;
+
+      if (status === 400 || (error && (error.code === '42703' || /mature.*does not exist/i.test(error.message||'')))) {
+        if (TL.HAS_MATURE_REPLIES){ TL.HAS_MATURE_REPLIES = false; return loadReplies(post_id); }
+      }
+      if (error){ console.warn('replies load error', error); return; }
+
+      const m = new Map([[post_id, data || []]]);
+      TL.render.renderRepliesBatch(m);
+    }
+
+    return { hydrateReactions, react, report, insertPost, fetchPage, loadRepliesForPosts, loadReplies };
+  })();
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE H] ACTIONS (posting, pagination, reload, replies)
+   * ============================================================ */
+  TL.actions = (function(){
+    const { els, sanitize, getCooldownLeft, setJustPosted } = TL.util;
+
+    async function initialLoad(){
+      const { rows, hasMore, newCursor } = await TL.data.fetchPage(null);
+      els.feed.innerHTML = '';
+      TL.render.appendRows(rows);
+      await TL.data.hydrateReactions(rows.map(r=>r.id));
+      await TL.data.loadRepliesForPosts(rows.map(r => r.id));
+      TL.nextCursor = newCursor;
+      updatePager(hasMore);
+    }
+
+    function updatePager(hasMore){
+      els.loadMoreBtn.disabled = !hasMore;
+      els.moreLabel.textContent = hasMore ? 'Load more' : 'No more posts';
+    }
+    function setLoading(v){
+      els.loadMoreBtn.disabled = v;
+      els.moreSpin.style.display = v ? 'inline-block' : 'none';
+      els.moreLabel.textContent = v ? 'Loading…' : 'Load more';
+    }
+
+    async function loadMore(){
+      if (els.loadMoreBtn.disabled) return;
+      setLoading(true);
+      const { rows, hasMore, newCursor } = await TL.data.fetchPage(TL.nextCursor);
+      TL.render.appendRows(rows);
+      await TL.data.hydrateReactions(rows.map(r=>r.id));
+      await TL.data.loadRepliesForPosts(rows.map(r => r.id));
+      TL.nextCursor = newCursor;
+      updatePager(hasMore);
+      setLoading(false);
+    }
+
+    async function reloadFeed(){
+      TL.seen.clear();
+      TL.nextCursor = null;
+      TL.POST_MATURE.clear();
+      els.feed.innerHTML = '';
+      await initialLoad();
+    }
+
     async function sendReply(post_id, textarea){
       const content = sanitize(textarea.value);
       if (!content) return;
-      if (needsNudge(content)){
+      if (TL.safety.needsNudge(content)){
         const ok = confirm('This reply may be uncivil or mature. Are you sure you want to post it?');
         if (!ok) return;
       }
       textarea.disabled = true;
       try{
-        let payload = { post_id, content, flair: SESSION_TAG };
-        if (HAS_MATURE_REPLIES) payload.mature = isMatureText(content);
-        const r = await sb.from('replies').insert(payload);
+        let payload = { post_id, content, flair: TL.session.tag };
+        if (TL.HAS_MATURE_REPLIES) payload.mature = TL.safety.isMatureText(content);
+        const r = await TL.sb.from('replies').insert(payload);
         if (r.error){
           if (r.error.code === '42703' || /mature.*does not exist/i.test(r.error.message||'')) {
-            HAS_MATURE_REPLIES = false;
-            await sb.from('replies').insert({ post_id, content, flair: SESSION_TAG });
+            TL.HAS_MATURE_REPLIES = false;
+            await TL.sb.from('replies').insert({ post_id, content, flair: TL.session.tag });
           } else {
             throw r.error;
           }
         }
         textarea.value = '';
-        loadReplies(post_id);
+        TL.data.loadReplies(post_id);
       }catch(e){
         alert('Reply failed: ' + (e?.message || 'see console'));
         console.error(e);
@@ -932,7 +911,103 @@
       }
     }
 
-    // --- Prompt of the day (expanded list) ---
+    async function post(){
+      const left = getCooldownLeft();
+      if (left>0){ TL.els.cool.textContent = left; return; }
+      const content = TL.util.sanitize(TL.els.text.value);
+      if (!content) return;
+
+      if (TL.safety.needsNudge(content)){
+        const ok = confirm('This post may be uncivil or mature. Are you sure you want to post it?');
+        if (!ok) return;
+      }
+
+      TL.els.postBtn.disabled = true;
+      try{
+        let payload = { content, flair: TL.session.tag };
+        if (TL.HAS_MATURE_POSTS) payload.mature = TL.safety.isMatureText(content);
+        const { error } = await TL.data.insertPost(payload);
+        if (error) throw error;
+        TL.els.text.value = '';
+        TL.els.count.textContent = '0';
+        setJustPosted();
+        TL.util.toast('Posted!');
+      }catch(e){
+        alert('Post failed: ' + (e?.message || 'see console'));
+        console.error(e);
+        TL.util.showStatus(e?.message || 'insert error');
+      }finally{ TL.els.postBtn.disabled = false; }
+    }
+
+    return { initialLoad, loadMore, reloadFeed, sendReply, post, updatePager };
+  })();
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE I] SUBSCRIPTIONS (realtime)
+   * ============================================================ */
+  TL.live = (function(){
+    function subscribe(){
+      TL.sb.channel('threadless_posts')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
+          const row = payload.new;
+          TL.POST_MATURE.set(row.id, TL.visibility.rowIsMaturePost(row));
+          if (!TL.visibility.shouldRenderPost(row)) return;
+          const node = TL.render.renderPost(row);
+          if (node) { TL.els.feed.prepend(node); TL.data.hydrateReactions([row.id]); }
+        })
+        .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
+          const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
+          if (el) el.remove();
+          TL.POST_MATURE.delete(payload.old.id);
+        })
+        .subscribe((state)=>{ TL.util.showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
+
+      TL.sb.channel('threadless_reports')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
+          const pid = payload.new.post_id;
+          const check = await TL.sb.from(TL.SOURCE).select('id').eq('id', pid).maybeSingle();
+          if (!check.data){
+            const el = document.querySelector(`.post[data-id="${pid}"]`);
+            if (el) el.remove();
+            TL.POST_MATURE.delete(pid);
+          }
+        })
+        .subscribe();
+
+      if (TL.REACTIONS_AVAILABLE){
+        TL.sb.channel('threadless_reacts')
+          .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
+            const { post_id, emoji } = payload.new;
+            const c = document.getElementById(`c_${post_id}_${emoji}`);
+            if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
+          })
+          .subscribe();
+      }
+
+      TL.sb.channel('threadless_replies')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
+          const r = payload.new;
+          if (TL.visibility.shouldRenderReply(r)){
+            const wrap = document.getElementById(`replies_${r.post_id}`);
+            if (wrap){
+              const node = TL.render.renderReply(r);
+              wrap.insertBefore(node, wrap.lastChild);
+            }
+          }
+        })
+        .subscribe();
+    }
+    return { subscribe };
+  })();
+  </script>
+
+  <script>
+  /* ============================================================
+   * [MODULE J] PROMPTS
+   * ============================================================ */
+  TL.prompts = (function(){
     const PROMPTS = [
       "What’s a tiny habit that changed your life?",
       "Describe a place you miss that no longer exists.",
@@ -941,7 +1016,7 @@
       "What’s the best question to ask a stranger?",
       "Share an unpopular opinion you can defend politely.",
       "What’s the most useful thing you learned this month?",
-      "Describe your ideal 15-minute break.",
+      "Describe your ideal 15-minute break?",
       "What’s a problem you solved in a weird way?",
       "What’s a small joy from today?"
     ];
@@ -955,140 +1030,62 @@
       const start = new Date(); start.setHours(0,0,0,0);
       const end = new Date(); end.setHours(23,59,59,999);
 
-      const { data, error } = await sb.from(SOURCE)
+      const { data, error } = await TL.sb.from(TL.SOURCE)
         .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
         .eq('flair','PromptBot').limit(1);
       if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
 
       const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
-      await insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
+      await TL.data.insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
       localStorage.setItem('threadless_prompt_date', today);
     }
 
-    // --- Post flow ---
-    textEl.addEventListener('input', ()=>{ countEl.textContent = textEl.value.length; });
-    textEl.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); post(); }});
-    postBtn.addEventListener('click', post);
+    return { ensurePromptOfDay };
+  })();
+  </script>
 
-    async function insertPost(payload){
-      if (HAS_FLAIR || HAS_MATURE_POSTS){
-        const r1 = await sb.from('posts').insert(payload);
-        if (!r1.error) return r1;
-        if (r1.error){
-          if (HAS_FLAIR && (r1.error.code === '42703' || /flair.*does not exist/i.test(r1.error.message||''))) HAS_FLAIR = false;
-          if (HAS_MATURE_POSTS && (r1.error.code === '42703' || /mature.*does not exist/i.test(r1.error.message||''))) HAS_MATURE_POSTS = false;
-          if (HAS_FLAIR || HAS_MATURE_POSTS) return insertPost({ content: payload.content }); // retry lean
-          return r1;
-        }
-      }
-      return sb.from('posts').insert({ content: payload.content });
-    }
+  <script>
+  /* ============================================================
+   * [MODULE K] BOOT / WIRING
+   * ============================================================ */
+  (async function boot(){
+    // Supabase
+    TL.sb = supabase.createClient(TL.SUPABASE_URL, TL.SUPABASE_ANON_KEY);
 
-    async function post(){
-      const left = getCooldownLeft();
-      if (left>0){ coolEl.textContent = left; return; }
-      const content = sanitize(textEl.value);
-      if (!content) return;
+    // Wire UI
+    const { els } = TL.util;
+    els.matureToggle.checked = TL.SHOW_MATURE;
+    els.matureToggle.addEventListener('change', ()=>{
+      TL.setShowMature(els.matureToggle.checked);
+    });
+    TL.util.$('rerollBtn').addEventListener('click', TL.session.rerollTag);
 
-      if (needsNudge(content)){
-        const ok = confirm('This post may be uncivil or mature. Are you sure you want to post it?');
-        if (!ok) return;
-      }
+    // Composer
+    els.text.addEventListener('input', ()=>{ els.count.textContent = els.text.value.length; });
+    els.text.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); TL.actions.post(); }});
+    els.postBtn.addEventListener('click', TL.actions.post);
 
-      postBtn.disabled = true;
-      try{
-        let payload = { content, flair: SESSION_TAG };
-        if (HAS_MATURE_POSTS) payload.mature = isMatureText(content);
-        const { error } = await insertPost(payload);
-        if (error) throw error;
-        textEl.value = '';
-        countEl.textContent = '0';
-        setJustPosted();
-        toast('Posted!');
-      }catch(e){
-        alert('Post failed: ' + (e?.message || 'see console'));
-        console.error(e);
-        showStatus(e?.message || 'insert error');
-      }finally{ postBtn.disabled = false; }
-    }
-
-    // --- Realtime: posts, replies, reports, reactions, deletes ---
-    async function subscribeRealtime(){
-      sb.channel('threadless_posts')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
-          const row = payload.new;
-          // store parent maturity immediately for downstream reply gating
-          POST_MATURE.set(row.id, rowIsMaturePost(row));
-          if (!shouldRenderPost(row)) return;
-          const node = renderPost(row);
-          if (node) { feedEl.prepend(node); hydrateReactions([row.id]); }
-        })
-        .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
-          const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
-          if (el) el.remove();
-          POST_MATURE.delete(payload.old.id);
-        })
-        .subscribe((state)=>{ showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
-
-      sb.channel('threadless_reports')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
-          const pid = payload.new.post_id;
-          const check = await sb.from(SOURCE).select('id').eq('id', pid).maybeSingle();
-          if (!check.data){
-            const el = document.querySelector(`.post[data-id="${pid}"]`);
-            if (el) el.remove();
-            POST_MATURE.delete(pid);
-          }
-        })
-        .subscribe();
-
-      if (REACTIONS_AVAILABLE){
-        sb.channel('threadless_reacts')
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
-            const { post_id, emoji } = payload.new;
-            const c = document.getElementById(`c_${post_id}_${emoji}`);
-            if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
-          })
-          .subscribe();
-      }
-
-      sb.channel('threadless_replies')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
-          const r = payload.new;
-          if (shouldRenderReply(r)){
-            const wrap = document.getElementById(`replies_${r.post_id}`);
-            if (wrap){
-              const node = renderReply(r);
-              wrap.insertBefore(node, wrap.lastChild);
-            }
-          }
-        })
-        .subscribe();
-    }
-
-    // --- Pager + scroll ---
-    loadMoreBtn.addEventListener('click', loadMore);
+    // Pager + scroll
+    els.loadMoreBtn.addEventListener('click', TL.actions.loadMore);
     let autoLoading = false;
     window.addEventListener('scroll', async ()=>{
-      if (autoLoading || loadMoreBtn.disabled) return;
+      if (autoLoading || els.loadMoreBtn.disabled) return;
       const nearBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 200;
-      if (nearBottom){
-        autoLoading = true; await loadMore(); autoLoading = false;
-      }
+      if (nearBottom){ autoLoading = true; await TL.actions.loadMore(); autoLoading = false; }
     });
 
-    // --- Cooldown ticker ---
-    (async function tick(){ while(true){ coolEl.textContent = getCooldownLeft(); await sleep(500);} })();
+    // Cooldown ticker
+    (async function tick(){ while(true){ els.cool.textContent = TL.util.getCooldownLeft(); await TL.util.sleep(500);} })();
 
-    // --- Boot ---
-    (async function main(){
-      showStatus('connecting…');
-      await loadBadWords();
-      await initialLoad();
-      await subscribeRealtime();
-      await ensurePromptOfDay();
-    })();
+    // Safety words
+    TL.util.showStatus('connecting…');
+    await TL.safety.loadFromDB();
+
+    // Initial load + live + prompt
+    await TL.actions.initialLoad();
+    TL.live.subscribe();
+    await TL.prompts.ensurePromptOfDay();
+  })();
   </script>
 </body>
 </html>
-
