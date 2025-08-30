@@ -295,65 +295,211 @@
   TL.safety = (function(){
     const { canonical, SEP } = TL.util;
 
-    // === Tuning (safe defaults) ===
-    const FUZZY_CORE = [
-      'fuck','shit','ass','asshole','bastard','motherfucker','bullshit',
-      'bitch','prick','twat','wanker','bollocks','bugger','goddamn','damn',
-      'dick','cock','pussy','cunt','tits','boobs',
-      'retard','fag','faggot','dyke','tranny'
-    ];
-    const TOKEN_MAX_EDIT = 1;  // allow 1 edit distance per token
-    const JOINED_MIN_LEN = 4;  // avoid short roots like "ass" matching "assume"
-    const JOINED_MAX_EDIT = 1; // 1 edit distance for sliding checks
+    // === Tuning (safe defaults, expanded) ===
+const FUZZY_CORE = [
+  // profanity / harassment (stems)
+  'fuck','shit','ass','asshole','bastard','motherfucker','bullshit',
+  'bitch','prick','twat','wanker','bollocks','bugger','goddamn','damn',
+  'dick','cock','pussy','cunt','tits','boobs','balls','scrote','schlong',
 
-    // === Fallback bad list (curated) ===
-    let BAD_WORDS = [
-      // slurs (examples; keep server list as source of truth)
-      {word:'nigger', category:'slur'},
-      {word:'nigga', category:'slur'},
-      {word:'coon', category:'slur'},
-      {word:'chink', category:'slur'},
-      {word:'gook', category:'slur'},
-      {word:'spic', category:'slur'},
-      {word:'kike', category:'slur'},
-      {word:'tranny', category:'slur'},
-      {word:'faggot', category:'slur'},
-      {word:'dyke', category:'slur'},
-      {word:'retard', category:'slur'},
-      // extremism
-      {word:'nazi', category:'extremist'},
-      {word:'neo-nazi', category:'extremist'},
-      {word:'heil hitler', category:'extremist'},
-      {word:'sieg heil', category:'extremist'},
-      {word:'third reich', category:'extremist'},
-      {word:'swastika', category:'extremist'},
-      {word:'kkk', category:'extremist'},
-      {word:'white power', category:'extremist'},
-      {word:'1488', category:'extremist'},
-      {word:'14 words', category:'extremist'},
-      {word:'blood and soil', category:'extremist'},
-      // threats/violence/self-harm
-      {word:'kill yourself', category:'self-harm'},
-      {word:'kys', category:'self-harm'},
-      {word:'suicide', category:'self-harm'},
-      {word:'lynch', category:'violence'},
-      {word:'dox', category:'threat'},
-      {word:'swat', category:'threat'},
-      // explicit/sexual
-      {word:'rape', category:'harm'},
-      {word:'cum', category:'sexual'},
-      {word:'cock', category:'sexual'},
-      {word:'pussy', category:'sexual'},
-      {word:'cunt', category:'sexual'},
-      {word:'slut', category:'sexual'},
-      {word:'whore', category:'sexual'},
-      {word:'dick', category:'sexual'},
-      // profanity
-      {word:'fuck', category:'profanity'},
-      {word:'shit', category:'profanity'},
-      {word:'asshole', category:'profanity'},
-      {word:'bastard', category:'profanity'},
-    ];
+  // sexual / porn (stems)
+  'porn','porno','pr0n','nsfw','xxx','hentai','futanari','onlyfans',
+  'camgirl','camwhore','bdsm','deepthroat','rimjob','blowjob','handjob',
+  'cum','cumshot','creampie','facial','milf','gilf','thot','skank','slut',
+  'anal','rimming','pegging','fisting','gangbang','bukkake','tittyfuck',
+
+  // harm / abuse
+  'rape','rapist','molest','groomer','grooming','bestial','zoophil','incest',
+  'necrophil','ped','pedo','paedo','cp', // (child-abuse shorthand)
+
+  // self-harm / threats / violence / gore
+  'kys','suicide','selfharm','dox','swat','lynch','beheading','dismember',
+  'disembowel','snuff','gore',
+
+  // extremist (stems)
+  'nazi','heil','swastika','thirdreich','whitepower','whitepride','1488','wpww',
+];
+
+// keep these guards to avoid “ass” → “assume” type false positives
+const TOKEN_MAX_EDIT = 1;   // allow 1 edit distance per token
+const JOINED_MIN_LEN = 4;   // only slide windows for bases ≥4 chars
+const JOINED_MAX_EDIT = 1;  // 1 edit distance for sliding checks
+
+// === Fallback bad list (curated & expanded) ===
+// NOTE: phrases are fine here; keep the DB (bad_words) as the true source of truth.
+let BAD_WORDS = [
+  // — Slurs (selection; keep this list maintainable, DB can be larger)
+  {word:'nigger', category:'slur'},
+  {word:'nigga', category:'slur'},
+  {word:'coon', category:'slur'},
+  {word:'porch monkey', category:'slur'},
+  {word:'jigaboo', category:'slur'},
+  {word:'tar baby', category:'slur'},
+  {word:'chink', category:'slur'},
+  {word:'gook', category:'slur'},
+  {word:'zipperhead', category:'slur'},
+  {word:'slant', category:'slur'},
+  {word:'ching chong', category:'slur'},
+  {word:'spic', category:'slur'},
+  {word:'beaner', category:'slur'},
+  {word:'wetback', category:'slur'},
+  {word:'kike', category:'slur'},
+  {word:'yid', category:'slur'},
+  {word:'paki', category:'slur'},
+  {word:'raghead', category:'slur'},
+  {word:'sand nigger', category:'slur'},
+  {word:'gypsy', category:'slur'},
+  {word:'pikey', category:'slur'},
+  {word:'abo', category:'slur'},
+  {word:'boong', category:'slur'},
+  {word:'cracker', category:'slur'},
+  {word:'honky', category:'slur'},
+  {word:'white trash', category:'slur'},
+  {word:'faggot', category:'slur'},
+  {word:'fag', category:'slur'},
+  {word:'dyke', category:'slur'},
+  {word:'shemale', category:'slur'},
+  {word:'tranny', category:'slur'},
+  {word:'homo', category:'slur'},
+  {word:'butt pirate', category:'slur'},
+  {word:'retard', category:'slur'},
+  {word:'spaz', category:'slur'},
+  {word:'mongoloid', category:'slur'},
+  {word:'cripple', category:'slur'},
+  {word:'downie', category:'slur'},
+  {word:'autist', category:'slur'},
+
+  // — Extremism
+  {word:'nazi', category:'extremist'},
+  {word:'neo-nazi', category:'extremist'},
+  {word:'heil hitler', category:'extremist'},
+  {word:'sieg heil', category:'extremist'},
+  {word:'third reich', category:'extremist'},
+  {word:'swastika', category:'extremist'},
+  {word:'kkk', category:'extremist'},
+  {word:'white power', category:'extremist'},
+  {word:'white pride', category:'extremist'},
+  {word:'1488', category:'extremist'},
+  {word:'14 words', category:'extremist'},
+  {word:'wpww', category:'extremist'},
+  {word:'blood and soil', category:'extremist'},
+  {word:'great replacement', category:'extremist'},
+  {word:'holohoax', category:'extremist'},
+  {word:'holocaust denial', category:'extremist'},
+  {word:'atomwaffen', category:'extremist'},
+
+  // — Threats / violence / self-harm
+  {word:'kill yourself', category:'self-harm'},
+  {word:'kys', category:'self-harm'},
+  {word:'hang yourself', category:'self-harm'},
+  {word:'self-harm', category:'self-harm'},
+  {word:'suicide', category:'self-harm'},
+  {word:'cut myself', category:'self-harm'},
+  {word:'overdose', category:'self-harm'},
+  {word:'lynch', category:'violence'},
+  {word:'gas chamber', category:'violence'},
+  {word:'beheading', category:'nsfl'},
+  {word:'dismember', category:'nsfl'},
+  {word:'disembowel', category:'nsfl'},
+  {word:'snuff', category:'nsfl'},
+  {word:'gore', category:'nsfl'},
+
+  // — Sexual harm / illegal
+  {word:'rape', category:'harm'},
+  {word:'rapist', category:'harm'},
+  {word:'molest', category:'harm'},
+  {word:'groomer', category:'harm'},
+  {word:'grooming', category:'harm'},
+  {word:'pedophile', category:'harm'},
+  {word:'paedophile', category:'harm'},
+  {word:'pedo', category:'harm'},
+  {word:'cp', category:'harm'},          // shorthand people type
+  {word:'loli', category:'sexual'},      // used for sexualized minors content
+  {word:'lolita', category:'sexual'},
+  {word:'incest', category:'sexual'},
+  {word:'bestiality', category:'sexual'},
+  {word:'zoophilia', category:'sexual'},
+  {word:'necrophilia', category:'sexual'},
+
+  // — Porn / explicit (incl. sites & slang)
+  {word:'porn', category:'sexual'},
+  {word:'porno', category:'sexual'},
+  {word:'pr0n', category:'sexual'},
+  {word:'nsfw', category:'sexual'},
+  {word:'xxx', category:'sexual'},
+  {word:'hentai', category:'sexual'},
+  {word:'futanari', category:'sexual'},
+  {word:'onlyfans', category:'sexual'},
+  {word:'camgirl', category:'sexual'},
+  {word:'camwhore', category:'sexual'},
+  {word:'pornhub', category:'sexual'},
+  {word:'xvideos', category:'sexual'},
+  {word:'xhamster', category:'sexual'},
+  {word:'redtube', category:'sexual'},
+  {word:'xnxx', category:'sexual'},
+  {word:'rule34', category:'sexual'},
+
+  // — Explicit/sexual terms
+  {word:'cum', category:'sexual'},
+  {word:'cumshot', category:'sexual'},
+  {word:'creampie', category:'sexual'},
+  {word:'jizz', category:'sexual'},
+  {word:'jism', category:'sexual'},
+  {word:'semen', category:'sexual'},
+  {word:'cock', category:'sexual'},
+  {word:'dick', category:'sexual'},
+  {word:'penis', category:'sexual'},
+  {word:'pussy', category:'sexual'},
+  {word:'vagina', category:'sexual'},
+  {word:'tits', category:'sexual'},
+  {word:'boobs', category:'sexual'},
+  {word:'nipple', category:'sexual'},
+  {word:'ass', category:'profanity'},
+  {word:'asshole', category:'profanity'},
+  {word:'anal', category:'sexual'},
+  {word:'rimjob', category:'sexual'},
+  {word:'blowjob', category:'sexual'},
+  {word:'handjob', category:'sexual'},
+  {word:'deepthroat', category:'sexual'},
+  {word:'facial', category:'sexual'},
+  {word:'milf', category:'sexual'},
+  {word:'gilf', category:'sexual'},
+  {word:'bdsm', category:'sexual'},
+  {word:'gangbang', category:'sexual'},
+  {word:'bukkake', category:'sexual'},
+  {word:'tittyfuck', category:'sexual'},
+  {word:'pegging', category:'sexual'},
+  {word:'fisting', category:'sexual'},
+  {word:'buttplug', category:'sexual'},
+  {word:'butt plug', category:'sexual'},
+
+  // — Harassment / profanity (extras)
+  {word:'bitch', category:'harassment'},
+  {word:'whore', category:'sexual'},
+  {word:'slut', category:'sexual'},
+  {word:'thot', category:'sexual'},
+  {word:'skank', category:'sexual'},
+  {word:'prick', category:'harassment'},
+  {word:'twat', category:'harassment'},
+  {word:'douchebag', category:'harassment'},
+  {word:'douche', category:'harassment'},
+  {word:'nonce', category:'harassment'},
+
+  // — Plain profanity
+  {word:'fuck', category:'profanity'},
+  {word:'fucking', category:'profanity'},
+  {word:'motherfucker', category:'profanity'},
+  {word:'mf', category:'profanity'},
+  {word:'shit', category:'profanity'},
+  {word:'bullshit', category:'profanity'},
+  {word:'bastard', category:'profanity'},
+  {word:'goddamn', category:'profanity'},
+  {word:'damn', category:'profanity'},
+  {word:'piss', category:'profanity'},
+  {word:'wanker', category:'profanity'},
+  {word:'bollocks', category:'profanity'},
+  {word:'bugger', category:'profanity'},
+];
     let BAD_RE = null;
 
     function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -1089,3 +1235,4 @@
   </script>
 </body>
 </html>
+
