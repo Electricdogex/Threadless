@@ -143,21 +143,6 @@
             <input type="checkbox" id="matureToggle" />
             Show mature
           </label>
-          <!-- Accounts (local username only) -->
-<div class="account-row" style="display:flex; align-items:center; gap:8px;">
-  <input id="emailInput" type="text" inputmode="text" autocomplete="off"
-         placeholder="pick a username…" class="theme-select"
-         style="min-width:170px" />
-  <button id="loginBtn"  class="btn mini" type="button">Use username</button>
-  <!-- signup not used in local mode; keep for API parity / future -->
-  <button id="signupBtn" class="btn mini" type="button" style="display:none">Sign up</button>
-
-  <span id="meBox" class="pill" style="display:none">
-    <span id="whoami">anon</span>
-  </span>
-  <button id="logoutBtn" class="btn mini" type="button" style="display:none">Sign out</button>
-</div>
-
 
           <span class="pill" id="status">connecting…</span>
         </div>
@@ -505,237 +490,181 @@
   </script>
 
   <script>
-/* ============================================================
- * [MODULE E] VISIBILITY LOGIC
- * ============================================================ */
-TL.visibility = (function(){
-  const { isMatureText } = TL.safety;
+  /* ============================================================
+   * [MODULE E] VISIBILITY LOGIC
+   * ============================================================ */
+  TL.visibility = (function(){
+    const { isMatureText } = TL.safety;
 
-  // --- maturity checks (posts vs replies keep separate flags) ---
-  function rowIsMaturePost(row){
-    if (TL.HAS_MATURE_POSTS && typeof row.mature === 'boolean') return row.mature === true;
-    return isMatureText(row.content || '');
-  }
-  function rowIsMatureReply(row){
-    if (TL.HAS_MATURE_REPLIES && typeof row.mature === 'boolean') return row.mature === true;
-    return isMatureText(row.content || '');
-  }
+    function rowIsMaturePost(row){
+      if (TL.HAS_MATURE_POSTS && typeof row.mature === 'boolean') return row.mature === true;
+      return isMatureText(row.content || '');
+    }
+    function rowIsMatureReply(row){
+      if (TL.HAS_MATURE_REPLIES && typeof row.mature === 'boolean') return row.mature === true;
+      return isMatureText(row.content || '');
+    }
+    function shouldRenderPost(row){ return TL.SHOW_MATURE || !rowIsMaturePost(row); }
+    function parentIsMature(post_id){ return !!TL.POST_MATURE.get(post_id); }
+    function shouldRenderReply(row){
+      if (TL.SHOW_MATURE) return true;
+      if (parentIsMature(row.post_id)) return false; // hide replies under a mature post
+      return !rowIsMatureReply(row);                 // allow only clean replies under clean post
+    }
 
-  // cache lookup populated by render/feeds
-  function parentIsMature(post_id){
-    return TL.POST_MATURE.get(post_id) === true;
-  }
+    return { rowIsMaturePost, rowIsMatureReply, shouldRenderPost, shouldRenderReply, parentIsMature };
+  })();
+  </script>
 
-  // posts render if either SHOW_MATURE is on, or the post is clean
-  function shouldRenderPost(row){
-    return TL.SHOW_MATURE || !rowIsMaturePost(row);
-  }
+  <script>
+  /* ============================================================
+   * [MODULE F] RENDERING
+   * ============================================================ */
+  TL.render = (function(){
+    const { els } = TL.util;
+    const { shouldRenderPost, rowIsMaturePost, rowIsMatureReply, shouldRenderReply, parentIsMature } = TL.visibility;
 
-  // replies render if:
-  // - SHOW_MATURE is on, OR
-  // - parent is clean AND reply is clean
-  function shouldRenderReply(row){
-    if (TL.SHOW_MATURE) return true;
-    if (parentIsMature(row.post_id)) return false;
-    return !rowIsMatureReply(row);
-  }
+    function emojiRow(post){
+      const wrap = document.createElement('div');
+      wrap.className = 'actions';
+      if (!TL.REACTIONS_AVAILABLE) { wrap.style.display = 'none'; return wrap; }
+      const emojis = [
+        {key:'up',    label:'🔼'},
+        {key:'down',  label:'🔽'},
+        {key:'like',  label:'👍'},
+        {key:'lol',   label:'😂'},
+        {key:'heart', label:'❤️'},
+      ];
+      emojis.forEach(({key,label})=>{
+        const btn = document.createElement('button');
+        btn.className = 'emoji';
+        btn.dataset.key = key;
+        btn.innerHTML = `<span>${label}</span> <span class="count" id="c_${post.id}_${key}">0</span>`;
+        btn.addEventListener('click', ()=>TL.data.react(post.id, key, btn));
+        wrap.appendChild(btn);
+      });
+      const reportBtn = document.createElement('button');
+      reportBtn.className = 'report';
+      reportBtn.textContent = 'Report';
+      reportBtn.title = 'Report this post';
+      reportBtn.addEventListener('click', ()=>TL.data.report(post.id));
+      wrap.appendChild(reportBtn);
+      return wrap;
+    }
 
-  return {
-    rowIsMaturePost,
-    rowIsMatureReply,
-    parentIsMature,
-    shouldRenderPost,
-    shouldRenderReply,
-  };
-})();
-/* ============================================================
- * [MODULE F] RENDERING
- * ============================================================ */
-TL.render = (function(){
-  const { shouldRenderPost, rowIsMaturePost, rowIsMatureReply } = TL.visibility;
+    function repliesSection(post){
+      const box = document.createElement('div');
+      box.className = 'replies';
+      box.id = `replies_${post.id}`;
 
-  // --- actions row: reactions + report ---
-  function emojiRow(post){
-    const wrap = document.createElement('div');
-    wrap.className = 'actions';
-    if (!TL.REACTIONS_AVAILABLE) { wrap.style.display = 'none'; return wrap; }
-
-    const EMOJIS = [
-      {key:'up',    label:'🔼'},
-      {key:'down',  label:'🔽'},
-      {key:'like',  label:'👍'},
-      {key:'lol',   label:'😂'},
-      {key:'heart', label:'❤️'},
-    ];
-
-    EMOJIS.forEach(({key,label})=>{
+      const rbox = document.createElement('div');
+      rbox.className = 'replybox';
+      const ta = document.createElement('textarea');
+      ta.placeholder = 'Write a reply… (Enter to send, Shift+Enter for newline)';
+      ta.maxLength = 1000;
       const btn = document.createElement('button');
-      btn.className = 'emoji';
-      btn.dataset.key = key;
-      btn.innerHTML = `<span>${label}</span> <span class="count" id="c_${post.id}_${key}">0</span>`;
-      btn.addEventListener('click', ()=>TL.data.react(post.id, key, btn));
-      wrap.appendChild(btn);
-    });
+      btn.className = 'btn rbtn';
+      btn.textContent = 'Reply';
+      btn.addEventListener('click', ()=>TL.actions.sendReply(post.id, ta));
+      ta.addEventListener('keydown', (e)=>{
+        if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); btn.click(); }
+      });
+      rbox.append(ta, btn);
 
-    const reportBtn = document.createElement('button');
-    reportBtn.className = 'report';
-    reportBtn.textContent = 'Report';
-    reportBtn.title = 'Report this post';
-    reportBtn.addEventListener('click', ()=>TL.data.report(post.id));
-    wrap.appendChild(reportBtn);
-
-    return wrap;
-  }
-
-  // --- replies: composer box under each post ---
-  function repliesSection(post){
-    const box = document.createElement('div');
-    box.className = 'replies';
-    box.id = `replies_${post.id}`;
-
-    const rbox = document.createElement('div');
-    rbox.className = 'replybox';
-
-    const ta = document.createElement('textarea');
-    ta.placeholder = 'Write a reply… (Enter to send, Shift+Enter for newline)';
-    ta.maxLength = 1000;
-
-    const btn = document.createElement('button');
-    btn.className = 'btn rbtn';
-    btn.textContent = 'Reply';
-    btn.addEventListener('click', ()=>TL.actions.sendReply(post.id, ta));
-
-    ta.addEventListener('keydown', (e)=>{
-      if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); btn.click(); }
-    });
-
-    rbox.append(ta, btn);
-    box.append(rbox);
-    return box;
-  }
-
-  // --- single reply bubble ---
-  function renderReply(row){
-    const el = document.createElement('div');
-    el.className = 'reply';
-    el.dataset.id = row.id;
-
-    const head = document.createElement('div');
-    head.className = 'rhead';
-
-    const f = document.createElement('span');
-    f.className = 'rflair';
-    f.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
-
-    const dot = document.createElement('span');
-    dot.textContent = '·';
-
-    const t = document.createElement('span');
-    t.textContent = new Date(row.created_at).toLocaleString();
-
-    head.append(f, dot, t);
-
-    const body = document.createElement('div');
-    body.className = 'rcontent';
-    body.textContent = row.content;
-
-    el.append(head, body);
-    return el;
-  }
-
-  // --- single post card ---
-  function renderPost(row){
-    // record parent maturity so reply gating works even if the card is hidden
-    const isMat = rowIsMaturePost(row);
-    TL.POST_MATURE.set(row.id, isMat);
-
-    if (!shouldRenderPost(row)) return null;
-    if (TL.seen.has(row.id)) return null;
-    TL.seen.add(row.id);
-
-    const card = document.createElement('div');
-    card.className = 'post';
-    card.dataset.id = row.id;
-
-    const head = document.createElement('div');
-    head.className = 'headerline';
-
-    const flair = document.createElement('span');
-    flair.className = 'flair';
-    flair.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
-
-    const dot = document.createElement('span');
-    dot.textContent = '·';
-
-    const time = document.createElement('span');
-    time.className = 'time';
-    time.textContent = new Date(row.created_at).toLocaleString();
-
-    head.append(flair, dot, time);
-
-    const content = document.createElement('div');
-    content.className = 'content';
-    content.textContent = row.content;
-
-    const actions = emojiRow(row);
-    const rsec = repliesSection(row);
-
-    card.append(head, content, actions, rsec);
-    return card;
-  }
-
-  // --- batch helpers used by data module ---
-  function appendRows(rows, {prepend=false} = {}){
-    if (!rows?.length) return;
-    const frag = document.createDocumentFragment();
-    for (const r of rows){
-      // keep parent maturity map up to date regardless of visibility
-      TL.POST_MATURE.set(r.id, rowIsMaturePost(r));
-      const node = renderPost(r);
-      if (node) frag.appendChild(node);
+      box.append(rbox);
+      return box;
     }
-    if (prepend) TL.els.feed.prepend(frag); else TL.els.feed.appendChild(frag);
-  }
 
-  // small utility used by data module
-  function groupBy(arr, key) {
-    const m = new Map();
-    for (const item of arr) {
-      const k = item[key];
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(item);
+    function renderReply(row){
+      const el = document.createElement('div');
+      el.className = 'reply';
+      el.dataset.id = row.id;
+      const head = document.createElement('div');
+      head.className = 'rhead';
+      const f = document.createElement('span'); f.className = 'rflair'; f.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
+      const dot = document.createElement('span'); dot.textContent = '·';
+      const t = document.createElement('span'); t.textContent = new Date(row.created_at).toLocaleString();
+      head.append(f, dot, t);
+      const body = document.createElement('div');
+      body.className = 'rcontent'; body.textContent = row.content;
+      el.append(head, body);
+      return el;
     }
-    return m;
-  }
 
-  // render replies for several posts at once
-  function renderRepliesBatch(groups) {
-    for (const [post_id, rows] of groups.entries()) {
-      const wrap = document.getElementById(`replies_${post_id}`);
-      if (!wrap) continue;
+    function renderPost(row){
+      const isMat = rowIsMaturePost(row);
+      TL.POST_MATURE.set(row.id, isMat);
 
-      // clear old replies but keep composer (last child)
-      [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
+      if (!shouldRenderPost(row)) return null;
+      if (TL.seen.has(row.id)) return null;
+      TL.seen.add(row.id);
 
-      const parentMat = TL.visibility.parentIsMature(post_id);
-      for (const r of rows) {
-        // when mature is OFF: show only clean replies under clean parents
-        if (TL.SHOW_MATURE || (!parentMat && !rowIsMatureReply(r))) {
-          wrap.insertBefore(renderReply(r), wrap.lastChild);
+      const el = document.createElement('div');
+      el.className = 'post';
+      el.dataset.id = row.id;
+
+      const head = document.createElement('div');
+      head.className = 'headerline';
+      const flair = document.createElement('span');
+      flair.className = 'flair';
+      flair.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
+      const dot = document.createElement('span'); dot.textContent = '·';
+      const time = document.createElement('span'); time.className = 'time';
+      time.textContent = new Date(row.created_at).toLocaleString();
+      head.append(flair, dot, time);
+
+      const content = document.createElement('div');
+      content.className = 'content';
+      content.textContent = row.content;
+
+      const actions = emojiRow(row);
+      const rsec = repliesSection(row);
+
+      el.append(head, content, actions, rsec);
+      return el;
+    }
+
+    function appendRows(rows, {prepend=false} = {}){
+      if (!rows.length) return;
+      const frag = document.createDocumentFragment();
+      for (const r of rows){
+        TL.POST_MATURE.set(r.id, rowIsMaturePost(r)); // store even if not rendering due to toggle
+        const node = renderPost(r);
+        if (node) frag.appendChild(node);
+      }
+      if (prepend) TL.els.feed.prepend(frag); else TL.els.feed.appendChild(frag);
+    }
+
+    function groupBy(arr, key) {
+      const m = new Map();
+      for (const item of arr) {
+        const k = item[key];
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(item);
+      }
+      return m;
+    }
+
+    function renderRepliesBatch(groups) {
+      for (const [post_id, rows] of groups.entries()) {
+        const wrap = document.getElementById(`replies_${post_id}`);
+        if (!wrap) continue;
+        [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
+
+        const parentMat = TL.visibility.parentIsMature(post_id);
+        for (const r of rows) {
+          if (TL.SHOW_MATURE || (!parentMat && !TL.visibility.rowIsMatureReply(r))) {
+            wrap.insertBefore(renderReply(r), wrap.lastChild);
+          }
         }
       }
     }
-  }
 
-  return {
-    emojiRow,
-    renderReply,
-    renderPost,
-    appendRows,
-    groupBy,
-    renderRepliesBatch,
-  };
-})();
+    return { emojiRow, renderReply, renderPost, appendRows, groupBy, renderRepliesBatch };
+  })();
+  </script>
+
+  <script>
   /* ============================================================
    * [MODULE G] DATA (Supabase queries)
    * ============================================================ */
@@ -1015,82 +944,29 @@ TL.render = (function(){
   </script>
 
   <script>
-/* ============================================================
- * [MODULE I] SUBSCRIPTIONS (realtime)
- * ============================================================ */
-TL.live = (function(){
-  let bound = false;
-  const channels = [];
-
-  function bindOnce(ch){
-    channels.push(ch);
-    return ch.subscribe((state)=>{
-      // 'SUBSCRIBED' | 'CLOSED' | 'CHANNEL_ERROR' | ...
-      TL.util.showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase());
-    });
-  }
-
-  function subscribe(){
-    if (bound) return; // prevent duplicate listeners on hot reloads
-    bound = true;
-
-    // --- Posts: INSERT / UPDATE / DELETE ---
-    bindOnce(
+  /* ============================================================
+   * [MODULE I] SUBSCRIPTIONS (realtime)
+   * ============================================================ */
+  TL.live = (function(){
+    function subscribe(){
       TL.sb.channel('threadless_posts')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
           const row = payload.new;
-          // track maturity even if hidden (so replies can be filtered correctly)
           TL.POST_MATURE.set(row.id, TL.visibility.rowIsMaturePost(row));
           if (!TL.visibility.shouldRenderPost(row)) return;
-
           const node = TL.render.renderPost(row);
-          if (node){
-            TL.els.feed.prepend(node);
-            TL.data.hydrateReactions([row.id]);
-          }
-        })
-        .on('postgres_changes', { event:'UPDATE', schema:'public', table:'posts' }, payload=>{
-          const row = payload.new;
-          const wasMature = TL.POST_MATURE.get(row.id) === true;
-          const isMature  = TL.visibility.rowIsMaturePost(row);
-          TL.POST_MATURE.set(row.id, isMature);
-
-          // if maturity state flips while "Show mature" is off:
-          if (!TL.SHOW_MATURE && wasMature !== isMature){
-            const el = document.querySelector(`.post[data-id="${row.id}"]`);
-            if (isMature){
-              // became mature -> remove card
-              if (el) el.remove();
-            } else {
-              // became non-mature -> (re)render if not on page
-              if (!el){
-                const node = TL.render.renderPost(row);
-                if (node){
-                  TL.els.feed.prepend(node);
-                  TL.data.hydrateReactions([row.id]);
-                  // (Replies will be loaded on demand/scroll; this keeps it light)
-                }
-              }
-            }
-          } else {
-            // if SHOW_MATURE or maturity unchanged: optionally patch header text
-            const el = document.querySelector(`.post[data-id="${row.id}"] .content`);
-            if (el) el.textContent = row.content;
-          }
+          if (node) { TL.els.feed.prepend(node); TL.data.hydrateReactions([row.id]); }
         })
         .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
           const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
           if (el) el.remove();
           TL.POST_MATURE.delete(payload.old.id);
         })
-    );
+        .subscribe((state)=>{ TL.util.showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
 
-    // --- Reports: remove locally if DB hid/removed post ---
-    bindOnce(
       TL.sb.channel('threadless_reports')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
           const pid = payload.new.post_id;
-          // Is the post still present in SOURCE?
           const check = await TL.sb.from(TL.SOURCE).select('id').eq('id', pid).maybeSingle();
           if (!check.data){
             const el = document.querySelector(`.post[data-id="${pid}"]`);
@@ -1098,76 +974,36 @@ TL.live = (function(){
             TL.POST_MATURE.delete(pid);
           }
         })
-    );
+        .subscribe();
 
-    // --- Reactions: live counters ---
-    if (TL.REACTIONS_AVAILABLE){
-      bindOnce(
+      if (TL.REACTIONS_AVAILABLE){
         TL.sb.channel('threadless_reacts')
           .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
             const { post_id, emoji } = payload.new;
             const c = document.getElementById(`c_${post_id}_${emoji}`);
             if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
           })
-      );
-    }
+          .subscribe();
+      }
 
-    // --- Replies: INSERT / DELETE (UPDATE optional) ---
-    bindOnce(
       TL.sb.channel('threadless_replies')
         .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
           const r = payload.new;
-          if (!TL.visibility.shouldRenderReply(r)) return;
-
-          const wrap = document.getElementById(`replies_${r.post_id}`);
-          if (wrap){
-            const node = TL.render.renderReply(r);
-            wrap.insertBefore(node, wrap.lastChild);
-          }
-        })
-        .on('postgres_changes', { event:'DELETE', schema:'public', table:'replies' }, payload=>{
-          const id = payload.old.id;
-          const el = document.querySelector(`.reply[data-id="${id}"]`);
-          if (el) el.remove();
-        })
-        .on('postgres_changes', { event:'UPDATE', schema:'public', table:'replies' }, payload=>{
-          // if moderation toggles a reply's mature flag, reflect it
-          const r = payload.new;
-          const el = document.querySelector(`.reply[data-id="${r.id}"]`);
-          if (!TL.SHOW_MATURE){
-            const parentMat = TL.POST_MATURE.get(r.post_id) === true;
-            const replyMat  = (TL.HAS_MATURE_REPLIES && typeof r.mature === 'boolean')
-                              ? r.mature : TL.util.isMatureText(r.content||'');
-            if (parentMat || replyMat){
-              if (el) el.remove(); // hide if now mature
-              return;
-            }
-          }
-          // if visible and just content changed, patch it
-          if (el){
-            const body = el.querySelector('.rcontent');
-            if (body) body.textContent = r.content;
-          } else {
-            // it might have become non-mature; render if parent section exists
+          if (TL.visibility.shouldRenderReply(r)){
             const wrap = document.getElementById(`replies_${r.post_id}`);
-            if (wrap && TL.visibility.shouldRenderReply(r)){
+            if (wrap){
               const node = TL.render.renderReply(r);
               wrap.insertBefore(node, wrap.lastChild);
             }
           }
         })
-    );
-  }
+        .subscribe();
+    }
+    return { subscribe };
+  })();
+  </script>
 
-  // optional: call this if you hot-reload modules
-  function unsubscribeAll(){
-    for (const ch of channels) try { ch.unsubscribe?.(); } catch {}
-    channels.length = 0;
-    bound = false;
-  }
-
-  return { subscribe, unsubscribeAll };
-})();
+  <script>
   /* ============================================================
    * [MODULE J] PROMPTS
    * ============================================================ */
@@ -1253,4 +1089,3 @@ TL.live = (function(){
   </script>
 </body>
 </html>
-
