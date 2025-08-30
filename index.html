@@ -1233,6 +1233,159 @@ let BAD_WORDS = [
     await TL.prompts.ensurePromptOfDay();
   })();
   </script>
+
+  <script>
+/* ============================================================
+ * [MODULE L] RESPONSIVE / MOBILE TWEAKS (drop-in)
+ *  - No markup changes required
+ *  - Injects a small CSS override + toggles compact UX on mobile
+ * ============================================================ */
+(function responsiveModule(){
+  const CSS = `
+  /* --- layout tweaks shared --- */
+  .topbar { gap: 10px; }
+  .theme-select { min-width: 120px; }
+  .meta { white-space: nowrap; }
+  .actions { flex-wrap: wrap; }
+
+  /* --- MOBILE RULES --- */
+  @media (max-width: 720px){
+    .wrap{ padding:12px; }
+    .topbar{ flex-wrap: wrap; align-items: flex-start; }
+    .brand{ flex: 1 1 100%; min-width: 0; }
+    .brand h1{ font-size:20px; }
+    .brand .sub{ font-size:12px; }
+
+    /* Hide the long ALPHA badge on narrow screens */
+    .topbar .alpha{ display:none; }
+
+    /* Controls cluster: theme + mature + status stack nicely */
+    .topbar > div[style*="display:flex"]{
+      flex: 1 1 100%;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .theme-switch { order: 1; font-size:12px; gap:6px; }
+    .theme-select { max-width: 140px; }
+
+    .switch { order: 2; font-size:12px; gap:6px; }
+
+    /* Keep online pill visible; don't let it overflow to the right */
+    #status.pill{
+      order: 3;
+      margin-left: 0 !important;
+      align-self: center;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Composer row: let metadata wrap beneath the Post button */
+    .row{ flex-wrap: wrap; }
+    .meta{
+      margin-left: 0;
+      width: 100%;
+      text-align: left;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* Replies action row can wrap */
+    .actions{ gap:8px; }
+
+    /* Slightly smaller textarea min-height on phones */
+    textarea{ min-height: 90px; }
+  }
+
+  /* --- VERY SMALL PHONES (<=360px) --- */
+  @media (max-width: 360px){
+    .theme-select { max-width: 120px; }
+    .brand h1{ font-size:18px; }
+  }
+  `;
+
+  // Inject style tag once
+  const styleId = 'tl-responsive-overrides';
+  if (!document.getElementById(styleId)){
+    const s = document.createElement('style');
+    s.id = styleId;
+    s.textContent = CSS;
+    document.head.appendChild(s);
+  }
+
+  // JS helpers to toggle compact labels on mobile
+  const mq = window.matchMedia('(max-width: 720px)');
+  const likelyTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+  // Cache original label text so we can restore on desktop
+  let originalMatureLabelText = null;
+
+  function setMatureLabel(compact){
+    const lbl = document.querySelector('label.switch');
+    if (!lbl) return;
+    // The label structure is: <label class="switch"><input .../> TEXT</label>
+    // Grab the last text node or create a span for safety.
+    // We'll normalize into a span with id to make swapping reliable.
+    let textSpan = lbl.querySelector('#tl-mature-text');
+    if (!textSpan){
+      // extract trailing text
+      const trailingText = Array.from(lbl.childNodes)
+        .filter(n => n.nodeType === Node.TEXT_NODE)
+        .map(n => n.nodeValue).join(' ').trim() || 'Show mature';
+      // remember original once
+      if (originalMatureLabelText === null) originalMatureLabelText = trailingText;
+      // clear old text nodes
+      Array.from(lbl.childNodes).forEach(n=>{
+        if (n.nodeType === Node.TEXT_NODE) lbl.removeChild(n);
+      });
+      // attach span
+      textSpan = document.createElement('span');
+      textSpan.id = 'tl-mature-text';
+      textSpan.style.marginLeft = '2px';
+      textSpan.textContent = trailingText;
+      lbl.appendChild(textSpan);
+    } else {
+      if (originalMatureLabelText === null) originalMatureLabelText = textSpan.textContent || 'Show mature';
+    }
+    textSpan.textContent = compact ? 'Mature' : originalMatureLabelText || 'Show mature';
+    lbl.title = 'Toggle mature/explicit content';
+  }
+
+  function applyCompactUI(){
+    const isMobile = mq.matches || likelyTouch;
+    document.documentElement.classList.toggle('is-mobile', !!isMobile);
+    setMatureLabel(!!isMobile);
+
+    // Keep the status pill text concise on phones
+    const st = document.getElementById('status');
+    if (st){
+      // normalize known values to short variants
+      const t = (st.textContent || '').toLowerCase().trim();
+      if (isMobile){
+        if (t.includes('connecting')) st.textContent = 'connecting…';
+        else if (t.includes('subscribed') || t.includes('online')) st.textContent = 'online';
+        else if (t.includes('closed')) st.textContent = 'offline';
+      } else {
+        // leave whatever TL.live sets; don't force long text
+      }
+    }
+  }
+
+  // Run now and on changes
+  applyCompactUI();
+  mq.addEventListener ? mq.addEventListener('change', applyCompactUI)
+                      : mq.addListener(applyCompactUI);
+  window.addEventListener('orientationchange', applyCompactUI);
+  window.addEventListener('resize', debounce(applyCompactUI, 150));
+
+  // Lightweight debounce
+  function debounce(fn, ms){
+    let t; return function(){ clearTimeout(t); t = setTimeout(fn, ms); };
+  }
+})();
+</script>
 </body>
 </html>
+
 
