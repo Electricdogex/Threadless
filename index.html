@@ -23,11 +23,10 @@
 
 <style>
   /* === Theme tokens === */
-  /* === Theme tokens === */
 :root{
   --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27;
   --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d; --warn:#ffd08f; --bad:#ff8c8c;
-  --font: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; /* NEW */
+  --font: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
   [data-theme="forest"]{ --bg:#0e1613; --card:#122019; --ink:#e9f5ee; --muted:#9db7ab; --line:#1e2e27; --accent:#ff8b3d; --accent-2:#1f9d68; --accent-2-ink:#06120d; --warn:#ffd08f }
   [data-theme="sunset"]{ --bg:#160f12; --card:#22161b; --ink:#ffeef3; --muted:#c5a7b3; --line:#2d1e25; --accent:#ff6b6b; --accent-2:#ffb86b; --accent-2-ink:#2b130f; --warn:#ffe0b5 }
@@ -36,7 +35,7 @@
   [data-theme="grape"]{ --bg:#160d1a; --card:#231128; --ink:#f6e9ff; --muted:#c7abd8; --line:#31153b; --accent:#c47dff; --accent-2:#ff9fb3; --accent-2-ink:#2b0c18; --warn:#ffe0c1 }
   [data-theme="mono"]{ --bg:#0c0c0c; --card:#141414; --ink:#f5f5f5; --muted:#bcbcbc; --line:#202020; --accent:#ffffff; --accent-2:#d0d0d0; --accent-2-ink:#121212; --warn:#ffd08f }
 
-  /* === NEW: X (formerly Twitter) theme === */
+  /* === X (formerly Twitter) theme === */
   [data-theme="x"]{
     --bg:#000000;
     --card:#0a0a0a;
@@ -47,7 +46,21 @@
     --accent-2:#1d9bf0;
     --accent-2-ink:#00131f;
     --warn:#ffd9a3;
-    --btn-ink:#ffffff; /* white text on blue buttons */
+    --btn-ink:#ffffff;
+  }
+
+  /* === Buran (Soviet spaceflight) theme === */
+  [data-theme="buran"]{
+    --bg:#0b0c0e;        /* deep space charcoal */
+    --card:#121418;      /* panel steel */
+    --ink:#f0f1f3;       /* enamel text */
+    --muted:#a2a8b3;     /* instrument gray */
+    --line:#1f232b;      /* steel border */
+    --accent:#d52b1e;    /* Soviet red */
+    --accent-2:#84b6ff;  /* blueprint blue */
+    --accent-2-ink:#06121f;
+    --warn:#ffcc66;      /* amber */
+    --btn-ink:#ffffff;
   }
 
   *{box-sizing:border-box}
@@ -59,16 +72,29 @@
       radial-gradient(1000px 800px at 120% -20%, color-mix(in srgb, var(--card) 60%, transparent) 0%, transparent 55%),
       var(--bg);
     color:var(--ink);
-    font:16px/1.5 var(--font); /* CHANGED to use token */
+    font:16px/1.5 var(--font);
+  }
+  /* X: flat black backdrop */
+  [data-theme="x"] body{ background: var(--bg) !important; }
+  /* Buran: subtle panel texture */
+  [data-theme="buran"] body{
+    background:
+      radial-gradient(900px 500px at 10% -10%, color-mix(in srgb, var(--card) 55%, transparent) 0%, transparent 60%),
+      radial-gradient(800px 700px at 110% -20%, color-mix(in srgb, var(--card) 55%, transparent) 0%, transparent 55%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.025), rgba(255,255,255,.025) 2px, transparent 2px, transparent 6px),
+      var(--bg) !important;
   }
 
-  /* Flatten background for X */
-  [data-theme="x"] body{ background: var(--bg) !important; }
-
   header{ position:sticky; top:0; z-index:3; background:linear-gradient(180deg, color-mix(in srgb, var(--card) 85%, transparent), transparent); backdrop-filter: blur(6px); border-bottom:1px solid var(--line) }
-  /* Subtler header glass on X */
   [data-theme="x"] header{
     background:linear-gradient(180deg, color-mix(in srgb, #000 65%, transparent), transparent);
+    backdrop-filter: blur(4px);
+    border-bottom:1px solid var(--line);
+  }
+  [data-theme="buran"] header{
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--card) 80%, transparent), transparent),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 4px);
     backdrop-filter: blur(4px);
     border-bottom:1px solid var(--line);
   }
@@ -80,13 +106,21 @@
   .brand{display:flex; align-items:center; gap:12px}
   .logo{ width:32px;height:32px;border-radius:10px;background:var(--bg);border:1px solid var(--line); display:grid; place-items:center }
   .logo::after{ content:''; display:block; width:24px; height:6px; border-radius:6px; background:var(--accent); box-shadow:0 12px 0 var(--accent), 0 24px 0 var(--accent); transform:translateY(-6px) }
-  /* X-style logo */
+  /* X badge */
   [data-theme="x"] .logo{ background:#000; border-color:var(--line); }
   [data-theme="x"] .logo::after{
     content:'X';
     width:auto; height:auto;
     background:none; box-shadow:none; transform:none;
     color:#fff; font:800 16px/1 var(--font); letter-spacing:.5px;
+  }
+  /* Buran badge (Cyrillic “Б”) */
+  [data-theme="buran"] .logo{ background:#0b0c0e; border-color:var(--line); }
+  [data-theme="buran"] .logo::after{
+    content:'Б';
+    width:auto; height:auto;
+    background:none; box-shadow:none; transform:none;
+    color:var(--accent); font:800 16px/1 var(--font); letter-spacing:.5px;
   }
 
   .alpha{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--accent-2-ink); background:linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 75%, #000 0%)); border:1px solid color-mix(in srgb, var(--accent-2) 65%, black); border-radius:999px; padding:6px 10px; box-shadow:0 4px 14px color-mix(in srgb, var(--accent-2) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.08) }
@@ -99,7 +133,6 @@
   .switch input{ width:16px; height:16px; cursor:pointer }
 
   .composer{ margin:16px 0; padding:12px; background:var(--card); border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.2) }
-  /* Flatter cards on X */
   [data-theme="x"] .composer,
   [data-theme="x"] .post,
   [data-theme="x"] .reply{
@@ -107,20 +140,34 @@
     border-color:var(--line);
     box-shadow:none;
   }
+  [data-theme="buran"] .composer,
+  [data-theme="buran"] .post,
+  [data-theme="buran"] .reply{
+    background:var(--card);
+    border-color:var(--line);
+    border-radius:12px;
+    box-shadow:none;
+  }
 
   textarea{ width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); border:1px solid color-mix(in srgb, var(--line) 75%, black 25%); border-radius:12px; padding:12px; resize:vertical; outline:none }
   textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent) }
-  /* Blue focus accent on X */
   [data-theme="x"] textarea:focus{
     border-color: color-mix(in srgb, var(--accent) 70%, #000 30%);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  [data-theme="buran"] textarea:focus{
+    border-color: color-mix(in srgb, var(--accent-2) 70%, #000 30%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 25%, transparent);
   }
 
   .row{display:flex; gap:12px; align-items:center; margin-top:10px}
   .btn{ border:0; border-radius:12px; padding:10px 14px; background:linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%)); color:var(--btn-ink, #28150a); font-weight:800; cursor:pointer; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.15) }
   .btn[disabled]{opacity:.55; cursor:not-allowed}
-  /* Primary button look on X */
   [data-theme="x"] .btn{
+    background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%));
+    color: var(--btn-ink, #fff);
+  }
+  [data-theme="buran"] .btn{
     background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%));
     color: var(--btn-ink, #fff);
   }
@@ -129,6 +176,7 @@
 
   .feed{display:flex; flex-direction:column; gap:12px; margin:20px 0}
   .post{padding:14px 14px 10px; background:linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 35%), var(--card); border:1px solid var(--line); border-radius:16px}
+
   .headerline{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; margin-bottom:6px}
   .flair{font-weight:700; color:var(--ink)}
   .content{white-space:pre-wrap; word-wrap:break-word}
@@ -136,11 +184,15 @@
 
   .actions{display:flex; align-items:center; gap:10px; margin-top:10px; user-select:none; color:var(--muted); font-size:13px}
   .emoji{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--line); border-radius:999px; background:color-mix(in srgb, var(--bg) 92%, black 8%); cursor:pointer}
-  /* Inputs/chips darker on X */
   [data-theme="x"] .emoji,
   [data-theme="x"] .pager .load-more,
   [data-theme="x"] textarea{
     background:#000;
+    border-color:var(--line);
+  }
+  [data-theme="buran"] .emoji,
+  [data-theme="buran"] .pager .load-more{
+    background:#0b0c0e;
     border-color:var(--line);
   }
 
@@ -148,9 +200,10 @@
   .count{color:var(--ink)}
   .report{margin-left:auto; cursor:pointer; color:var(--muted); border:1px solid var(--line); border-radius:999px; padding:6px 10px; background:transparent}
   .report:hover{color:var(--ink); border-color:var(--accent)}
-  /* Report/pills on X */
   [data-theme="x"] .report{ background:#000; border-color:var(--line); color:var(--muted); }
   [data-theme="x"] .report:hover{ color:var(--ink); border-color:var(--accent); }
+  [data-theme="buran"] .report{ background:#0b0c0e; border-color:var(--line); color:var(--muted); }
+  [data-theme="buran"] .report:hover{ color:var(--ink); border-color:var(--accent); }
 
   .notice{margin-top:8px; color:var(--warn); font-size:12px}
   a{color:var(--accent); text-decoration:none}
@@ -196,14 +249,16 @@
           <div class="theme-switch">
             Theme:
             <select id="theme" class="theme-select" aria-label="Select theme">
-              <option value="forest">Forest</option>
-              <option value="sunset">Sunset</option>
-              <option value="midnight">Midnight</option>
-              <option value="ocean">Ocean</option>
-              <option value="grape">Grape</option>
-              <option value="mono">Mono</option>
-              <option value="x">X</option><!-- NEW -->
-            </select>
+  <option value="forest">Forest</option>
+  <option value="sunset">Sunset</option>
+  <option value="midnight">Midnight</option>
+  <option value="ocean">Ocean</option>
+  <option value="grape">Grape</option>
+  <option value="mono">Mono</option>
+  <option value="x">X</option>
+  <option value="buran">Buran</option>
+</select>
+
           </div>
 
           <!-- Mature content toggle -->
@@ -1455,6 +1510,7 @@ let BAD_WORDS = [
 </script>
 </body>
 </html>
+
 
 
 
