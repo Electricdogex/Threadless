@@ -412,10 +412,10 @@
 
   <script>
 /* ============================================================
- * [MODULE C] SAFETY (regex + fuzzy + unicode hardening)
+ * [MODULE C] SAFETY (regex + fuzzy + unicode hardening + inflections)
  *  - Drop-in replacement
- *  - Catches leetspeak, spacing/punct splits, homoglyphs, repeats,
- *    light typos, and basic phonetic swaps WITHOUT enumerating variants
+ *  - Adds plural/verb/adjective inflection matching (s, es, ed, ing, er, est, ies)
+ *  - Still avoids enumerating bypass spellings; focuses on normalization + patterns
  *  - Public API preserved: loadFromDB, mergeBadWords, matchesBadWord,
  *    needsNudge, isMatureText
  * ============================================================ */
@@ -423,7 +423,6 @@ TL.safety = (function(){
   const { canonical: weakCanonical, SEP } = TL.util;
 
   /* =============== TUNING ================= */
-  // Short curated stems we fuzzy against (no need to expand manually)
   const FUZZY_CORE = [
     // profanity / harassment (stems)
     'fuck','shit','ass','asshole','bastard','motherfucker','bullshit',
@@ -450,26 +449,23 @@ TL.safety = (function(){
 
   // Guardrails to limit false positives
   const TOKEN_MAX_EDIT = 1;     // per-token Levenshtein allowance
-  const JOINED_MIN_LEN = 4;     // only slide windows for base ≥4
+  const JOINED_MIN_LEN = 4;     // sliding window base length
   const JOINED_MAX_EDIT = 1;    // sliding window edit distance
 
-  // Whitelist substrings that are commonly hit by short roots
+  // Common safe substrings to reduce "ass" false positives, etc.
   const SAFE_SUBSTRINGS = [
     'assess','passage','compassion','assimilate','assignment','assistant',
     'class','classic','passion','passive','bassoon','asset','associate',
   ];
 
   /* =============== CANONICALIZATION (STRONG) =============== */
-  // Additional leet & symbol swaps (on top of TL.util.canonical)
   const EXTRA_MAP = new Map(Object.entries({
     '€':'e','£':'l','¢':'c','¥':'y','₩':'w','₱':'p',
     '§':'s','$':'s','@':'a','&':'and','∧':'and',
-    '0':'o','1':'i','!':'i','|':'i','İ':'i','Í':'i','Ì':'i','Î':'i',
-    '3':'e','4':'a','5':'s','7':'t','8':'b','9':'g',
+    '0':'o','1':'i','!':'i','|':'i','3':'e','4':'a','5':'s','7':'t','8':'b','9':'g',
     '¢':'c','©':'c','®':'r',
   }));
 
-  // Minimal homoglyph folding for common Latin lookalikes
   const HOMO_MAP = new Map(Object.entries({
     // Cyrillic
     'А':'a','В':'b','Е':'e','К':'k','М':'m','Н':'h','О':'o','Р':'p','С':'c','Т':'t','У':'y','Х':'x',
@@ -482,229 +478,173 @@ TL.safety = (function(){
     'Ａ':'a','Ｂ':'b','Ｃ':'c','Ｄ':'d','Ｅ':'e','Ｆ':'f','Ｇ':'g','Ｈ':'h','Ｉ':'i','Ｊ':'j','Ｋ':'k','Ｌ':'l','Ｍ':'m','Ｎ':'n','Ｏ':'o','Ｐ':'p','Ｑ':'q','Ｒ':'r','Ｓ':'s','Ｔ':'t','Ｕ':'u','Ｖ':'v','Ｗ':'w','Ｘ':'x','Ｙ':'y','Ｚ':'z',
   }));
 
-  const ZERO_WIDTH_RE = /[\u200B-\u200D\uFEFF\u2060]/g;
-  const COMBINING_RE = /[\u0300-\u036f]/g; // diacritics after NFKD
+  const ZERO_WIDTH_RE   = /[\u200B-\u200D\uFEFF\u2060]/g;
+  const COMBINING_RE    = /[\u0300-\u036f]/g;
   const NON_PRINTING_RE = /[\u0000-\u001F\u007F]+/g;
 
-  function foldHomoglyphs(str){
-    let out = '';
-    for (const ch of str){
-      out += HOMO_MAP.get(ch) || ch;
-    }
-    return out;
-  }
+  function foldHomoglyphs(str){ let out=''; for (const ch of str){ out += HOMO_MAP.get(ch)||ch; } return out; }
+  function extraSwap(str){ let out=''; for (const ch of str){ out += EXTRA_MAP.get(ch)||ch; } return out; }
 
-  function extraSwap(str){
-    let out = '';
-    for (const ch of str){
-      out += EXTRA_MAP.get(ch) || ch;
-    }
-    return out;
-  }
-
-  // Strong normalization used by safety (leaves TL.util.canonical intact elsewhere)
   function canonicalStrong(s){
     if (!s) return '';
-    // Start with TL.util.canonical (lowercase, basic leet, zero-width removal)
-    let t = weakCanonical(String(s));
-
-    // NFKD -> strip diacritics; remove zero-width & non-printing
+    let t = weakCanonical(String(s)); // basic lowercase + some swaps
     t = t.normalize('NFKD').replace(COMBINING_RE,'').replace(ZERO_WIDTH_RE,'').replace(NON_PRINTING_RE,'');
-
-    // Fold homoglyphs & do extra leets/symbol swaps
     t = foldHomoglyphs(t);
     t = extraSwap(t);
-
-    // Collapse whitespace/punct to single spaces for token path
+    // keep separators as spaces so \W in patterns can still match
     t = t.replace(SEP, ' ').replace(/\s+/g,' ').trim();
-
     return t;
   }
 
-  /* =============== BAD WORDS (CANONICAL LIST, NO VARIANT EXPANSION) =============== */
-  // Note: keep curated. Your DB table `bad_words` remains the source of truth;
-  // this list only provides a fallback when DB is empty/unavailable.
+  /* =============== BAD WORDS (CURATED BASE FORMS) =============== */
+  // Keep this list maintainable; DB table `bad_words` remains source of truth.
   let BAD_WORDS = [
-    // — Slurs (selection; maintainable subset)
-    {word:'nigger', category:'slur'},
-    {word:'nigga', category:'slur'},
-    {word:'coon', category:'slur'},
-    {word:'porch monkey', category:'slur'},
-    {word:'jigaboo', category:'slur'},
-    {word:'tar baby', category:'slur'},
-    {word:'chink', category:'slur'},
-    {word:'gook', category:'slur'},
-    {word:'zipperhead', category:'slur'},
-    {word:'slant', category:'slur'},
-    {word:'ching chong', category:'slur'},
-    {word:'spic', category:'slur'},
-    {word:'beaner', category:'slur'},
-    {word:'wetback', category:'slur'},
-    {word:'kike', category:'slur'},
-    {word:'yid', category:'slur'},
-    {word:'paki', category:'slur'},
-    {word:'raghead', category:'slur'},
-    {word:'sand nigger', category:'slur'},
-    {word:'gypsy', category:'slur'},
-    {word:'pikey', category:'slur'},
-    {word:'abo', category:'slur'},
-    {word:'boong', category:'slur'},
-    {word:'cracker', category:'slur'},
-    {word:'honky', category:'slur'},
-    {word:'white trash', category:'slur'},
-    {word:'faggot', category:'slur'},
-    {word:'fag', category:'slur'},
-    {word:'dyke', category:'slur'},
-    {word:'shemale', category:'slur'},
-    {word:'tranny', category:'slur'},
-    {word:'homo', category:'slur'},
-    {word:'butt pirate', category:'slur'},
-    {word:'retard', category:'slur'},
-    {word:'spaz', category:'slur'},
-    {word:'mongoloid', category:'slur'},
-    {word:'cripple', category:'slur'},
-    {word:'downie', category:'slur'},
-    {word:'autist', category:'slur'},
+    // — Slurs (selection)
+    {word:'nigger', category:'slur'},{word:'nigga', category:'slur'},{word:'coon', category:'slur'},
+    {word:'porch monkey', category:'slur'},{word:'jigaboo', category:'slur'},{word:'tar baby', category:'slur'},
+    {word:'chink', category:'slur'},{word:'gook', category:'slur'},{word:'zipperhead', category:'slur'},
+    {word:'slant', category:'slur'},{word:'ching chong', category:'slur'},{word:'spic', category:'slur'},
+    {word:'beaner', category:'slur'},{word:'wetback', category:'slur'},{word:'kike', category:'slur'},
+    {word:'yid', category:'slur'},{word:'paki', category:'slur'},{word:'raghead', category:'slur'},
+    {word:'sand nigger', category:'slur'},{word:'gypsy', category:'slur'},{word:'pikey', category:'slur'},
+    {word:'abo', category:'slur'},{word:'boong', category:'slur'},{word:'cracker', category:'slur'},
+    {word:'honky', category:'slur'},{word:'white trash', category:'slur'},{word:'faggot', category:'slur'},
+    {word:'fag', category:'slur'},{word:'dyke', category:'slur'},{word:'shemale', category:'slur'},
+    {word:'tranny', category:'slur'},{word:'homo', category:'slur'},{word:'butt pirate', category:'slur'},
+    {word:'retard', category:'slur'},{word:'spaz', category:'slur'},{word:'mongoloid', category:'slur'},
+    {word:'cripple', category:'slur'},{word:'downie', category:'slur'},{word:'autist', category:'slur'},
 
     // — Extremism
-    {word:'nazi', category:'extremist'},
-    {word:'neo-nazi', category:'extremist'},
-    {word:'heil hitler', category:'extremist'},
-    {word:'sieg heil', category:'extremist'},
-    {word:'third reich', category:'extremist'},
-    {word:'swastika', category:'extremist'},
-    {word:'kkk', category:'extremist'},
-    {word:'white power', category:'extremist'},
-    {word:'white pride', category:'extremist'},
-    {word:'1488', category:'extremist'},
-    {word:'14 words', category:'extremist'},
-    {word:'wpww', category:'extremist'},
-    {word:'blood and soil', category:'extremist'},
-    {word:'great replacement', category:'extremist'},
-    {word:'holohoax', category:'extremist'},
-    {word:'holocaust denial', category:'extremist'},
-    {word:'atomwaffen', category:'extremist'},
+    {word:'nazi', category:'extremist'},{word:'neo-nazi', category:'extremist'},{word:'heil hitler', category:'extremist'},
+    {word:'sieg heil', category:'extremist'},{word:'third reich', category:'extremist'},{word:'swastika', category:'extremist'},
+    {word:'kkk', category:'extremist'},{word:'white power', category:'extremist'},{word:'white pride', category:'extremist'},
+    {word:'1488', category:'extremist'},{word:'14 words', category:'extremist'},{word:'wpww', category:'extremist'},
+    {word:'blood and soil', category:'extremist'},{word:'great replacement', category:'extremist'},
+    {word:'holohoax', category:'extremist'},{word:'holocaust denial', category:'extremist'},{word:'atomwaffen', category:'extremist'},
 
     // — Threats / violence / self-harm
-    {word:'kill yourself', category:'self-harm'},
-    {word:'kys', category:'self-harm'},
-    {word:'hang yourself', category:'self-harm'},
-    {word:'self-harm', category:'self-harm'},
-    {word:'suicide', category:'self-harm'},
-    {word:'cut myself', category:'self-harm'},
-    {word:'overdose', category:'self-harm'},
-    {word:'lynch', category:'violence'},
-    {word:'gas chamber', category:'violence'},
-    {word:'beheading', category:'nsfl'},
-    {word:'dismember', category:'nsfl'},
-    {word:'disembowel', category:'nsfl'},
-    {word:'snuff', category:'nsfl'},
-    {word:'gore', category:'nsfl'},
+    {word:'kill yourself', category:'self-harm'},{word:'kys', category:'self-harm'},
+    {word:'hang yourself', category:'self-harm'},{word:'self-harm', category:'self-harm'},
+    {word:'suicide', category:'self-harm'},{word:'cut myself', category:'self-harm'},
+    {word:'overdose', category:'self-harm'},{word:'lynch', category:'violence'},
+    {word:'gas chamber', category:'violence'},{word:'beheading', category:'nsfl'},
+    {word:'dismember', category:'nsfl'},{word:'disembowel', category:'nsfl'},
+    {word:'snuff', category:'nsfl'},{word:'gore', category:'nsfl'},
 
     // — Sexual harm / illegal
-    {word:'rape', category:'harm'},
-    {word:'rapist', category:'harm'},
-    {word:'molest', category:'harm'},
-    {word:'groomer', category:'harm'},
-    {word:'grooming', category:'harm'},
-    {word:'pedophile', category:'harm'},
-    {word:'paedophile', category:'harm'},
-    {word:'pedo', category:'harm'},
-    {word:'cp', category:'harm'},
-    {word:'loli', category:'sexual'},
-    {word:'lolita', category:'sexual'},
-    {word:'incest', category:'sexual'},
-    {word:'bestiality', category:'sexual'},
-    {word:'zoophilia', category:'sexual'},
-    {word:'necrophilia', category:'sexual'},
+    {word:'rape', category:'harm'},{word:'rapist', category:'harm'},{word:'molest', category:'harm'},
+    {word:'groomer', category:'harm'},{word:'grooming', category:'harm'},
+    {word:'pedophile', category:'harm'},{word:'paedophile', category:'harm'},{word:'pedo', category:'harm'},
+    {word:'cp', category:'harm'},{word:'loli', category:'sexual'},{word:'lolita', category:'sexual'},
+    {word:'incest', category:'sexual'},{word:'bestiality', category:'sexual'},
+    {word:'zoophilia', category:'sexual'},{word:'necrophilia', category:'sexual'},
 
     // — Porn / explicit (incl. sites & slang)
-    {word:'porn', category:'sexual'},
-    {word:'porno', category:'sexual'},
-    {word:'pr0n', category:'sexual'},
-    {word:'nsfw', category:'sexual'},
-    {word:'xxx', category:'sexual'},
-    {word:'hentai', category:'sexual'},
-    {word:'futanari', category:'sexual'},
-    {word:'onlyfans', category:'sexual'},
-    {word:'camgirl', category:'sexual'},
-    {word:'camwhore', category:'sexual'},
-    {word:'pornhub', category:'sexual'},
-    {word:'xvideos', category:'sexual'},
-    {word:'xhamster', category:'sexual'},
-    {word:'redtube', category:'sexual'},
-    {word:'xnxx', category:'sexual'},
-    {word:'rule34', category:'sexual'},
+    {word:'porn', category:'sexual'},{word:'porno', category:'sexual'},{word:'pr0n', category:'sexual'},
+    {word:'nsfw', category:'sexual'},{word:'xxx', category:'sexual'},{word:'hentai', category:'sexual'},
+    {word:'futanari', category:'sexual'},{word:'onlyfans', category:'sexual'},
+    {word:'camgirl', category:'sexual'},{word:'camwhore', category:'sexual'},
+    {word:'pornhub', category:'sexual'},{word:'xvideos', category:'sexual'},
+    {word:'xhamster', category:'sexual'},{word:'redtube', category:'sexual'},
+    {word:'xnxx', category:'sexual'},{word:'rule34', category:'sexual'},
 
     // — Explicit/sexual terms
-    {word:'cum', category:'sexual'},
-    {word:'cumshot', category:'sexual'},
-    {word:'creampie', category:'sexual'},
-    {word:'jizz', category:'sexual'},
-    {word:'jism', category:'sexual'},
-    {word:'semen', category:'sexual'},
-    {word:'cock', category:'sexual'},
-    {word:'dick', category:'sexual'},
-    {word:'penis', category:'sexual'},
-    {word:'pussy', category:'sexual'},
-    {word:'vagina', category:'sexual'},
-    {word:'tits', category:'sexual'},
-    {word:'boobs', category:'sexual'},
-    {word:'nipple', category:'sexual'},
-    {word:'ass', category:'profanity'},
-    {word:'asshole', category:'profanity'},
-    {word:'anal', category:'sexual'},
-    {word:'rimjob', category:'sexual'},
-    {word:'blowjob', category:'sexual'},
-    {word:'handjob', category:'sexual'},
-    {word:'deepthroat', category:'sexual'},
-    {word:'facial', category:'sexual'},
-    {word:'milf', category:'sexual'},
-    {word:'gilf', category:'sexual'},
-    {word:'bdsm', category:'sexual'},
-    {word:'gangbang', category:'sexual'},
-    {word:'bukkake', category:'sexual'},
-    {word:'tittyfuck', category:'sexual'},
-    {word:'pegging', category:'sexual'},
-    {word:'fisting', category:'sexual'},
-    {word:'buttplug', category:'sexual'},
-    {word:'butt plug', category:'sexual'},
+    {word:'cum', category:'sexual'},{word:'cumshot', category:'sexual'},{word:'creampie', category:'sexual'},
+    {word:'jizz', category:'sexual'},{word:'jism', category:'sexual'},{word:'semen', category:'sexual'},
+    {word:'cock', category:'sexual'},{word:'dick', category:'sexual'},{word:'penis', category:'sexual'},
+    {word:'pussy', category:'sexual'},{word:'vagina', category:'sexual'},{word:'tits', category:'sexual'},
+    {word:'boobs', category:'sexual'},{word:'nipple', category:'sexual'},
+    {word:'ass', category:'profanity'},{word:'asshole', category:'profanity'},
+    {word:'anal', category:'sexual'},{word:'rimjob', category:'sexual'},{word:'blowjob', category:'sexual'},
+    {word:'handjob', category:'sexual'},{word:'deepthroat', category:'sexual'},
+    {word:'facial', category:'sexual'},{word:'milf', category:'sexual'},{word:'gilf', category:'sexual'},
+    {word:'bdsm', category:'sexual'},{word:'gangbang', category:'sexual'},{word:'bukkake', category:'sexual'},
+    {word:'tittyfuck', category:'sexual'},{word:'pegging', category:'sexual'},
+    {word:'fisting', category:'sexual'},{word:'buttplug', category:'sexual'},{word:'butt plug', category:'sexual'},
 
     // — Harassment / profanity (extras)
-    {word:'bitch', category:'harassment'},
-    {word:'whore', category:'sexual'},
-    {word:'slut', category:'sexual'},
-    {word:'thot', category:'sexual'},
-    {word:'skank', category:'sexual'},
-    {word:'prick', category:'harassment'},
-    {word:'twat', category:'harassment'},
-    {word:'douchebag', category:'harassment'},
-    {word:'douche', category:'harassment'},
+    {word:'bitch', category:'harassment'},{word:'whore', category:'sexual'},
+    {word:'slut', category:'sexual'},{word:'thot', category:'sexual'},{word:'skank', category:'sexual'},
+    {word:'prick', category:'harassment'},{word:'twat', category:'harassment'},
+    {word:'douchebag', category:'harassment'},{word:'douche', category:'harassment'},
     {word:'nonce', category:'harassment'},
 
     // — Plain profanity
-    {word:'fuck', category:'profanity'},
-    {word:'fucking', category:'profanity'},
-    {word:'motherfucker', category:'profanity'},
-    {word:'mf', category:'profanity'},
-    {word:'shit', category:'profanity'},
-    {word:'bullshit', category:'profanity'},
-    {word:'bastard', category:'profanity'},
-    {word:'goddamn', category:'profanity'},
-    {word:'damn', category:'profanity'},
-    {word:'piss', category:'profanity'},
-    {word:'wanker', category:'profanity'},
-    {word:'bollocks', category:'profanity'},
+    {word:'fuck', category:'profanity'},{word:'fucking', category:'profanity'},
+    {word:'motherfucker', category:'profanity'},{word:'mf', category:'profanity'},
+    {word:'shit', category:'profanity'},{word:'bullshit', category:'profanity'},
+    {word:'bastard', category:'profanity'},{word:'goddamn', category:'profanity'},
+    {word:'damn', category:'profanity'},{word:'piss', category:'profanity'},
+    {word:'wanker', category:'profanity'},{word:'bollocks', category:'profanity'},
     {word:'bugger', category:'profanity'},
   ];
   let BAD_RE = null;
 
   function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  /* -------- inflection-aware pattern builder -------- */
+  const NON_INFLECTABLE = new Set(['kkk','wpww','xxx','nsfw','cp','1488']);
+  const between = '[\\W_]*'; // allows spaces/punct/underscores between letters (to catch splits/obfuscation)
+
+  function allowInflection(w){
+    if (!w) return false;
+    if (w.length < 3) return false;
+    if (/\d/.test(w)) return false;
+    if (NON_INFLECTABLE.has(w)) return false;
+    if (w.includes(' ')) return false; // keep phrases as-is (handled by flexible separators)
+    return true;
+  }
+
+  function lettersPattern(s){
+    // Build pattern with separators between letters (e.g., f[\W_]*u[\W_]*c[\W_]*k)
+    return s.split('').map(ch => escapeRegExp(ch)).join(between);
+  }
+
+  function phrasePattern(w){
+    // Support *phrases* by letting separators exist between words too
+    const parts = w.split(/\s+/).filter(Boolean);
+    return parts.map(lettersPattern).join(between);
+  }
+
+  function inflectionAlternatives(base){
+    const alts = [];
+    const lower = base.toLowerCase();
+
+    // basic suffix group for nouns/adjectives/verbs
+    const SUFFIX = '(?:s|es|ed|ing|er|ers|est)?';
+
+    // base itself (with optional generic suffixes)
+    alts.push(phrasePattern(lower) + SUFFIX);
+
+    if (allowInflection(lower)){
+      // y -> ies (e.g., 'gypsy' → 'gypsies'); only when ending with consonant+y
+      if (/[^aeiou]y$/.test(lower)){
+        const stem = lower.slice(0,-1) + 'i';
+        alts.push(phrasePattern(stem) + between + 'e' + between + 's');
+      }
+      // final -e dropping for -ing (e.g., 'rape' -> 'raping')
+      if (/e$/.test(lower)){
+        const stemNoE = lower.slice(0,-1);
+        alts.push(phrasePattern(stemNoE) + between + 'ing');
+      }
+    }
+
+    return '(?:' + alts.join('|') + ')';
+  }
+
   function rebuildBadRegex(){
-    const words = [...new Set((BAD_WORDS||[]).map(x => (x.word||'').trim()).filter(Boolean))]
-      .map(w => escapeRegExp(w.toLowerCase()))
-      .sort((a,b)=>b.length-a.length);
-    BAD_RE = words.length ? new RegExp("\\b(?:"+words.join("|")+")\\b","i") : null;
+    // Build a single big regex union, bounded so we don't hit inside safe words
+    const words = [...new Set((BAD_WORDS||[]).map(x => (x.word||'').trim().toLowerCase()).filter(Boolean))];
+
+    const patterns = words
+      .map(inflectionAlternatives);
+
+    // Boundaries: simulate word boundaries on our canonicalized text
+    // Use (^|[^a-z0-9]) ... (?=$|[^a-z0-9]) so we don't match inside 'class'
+    const union = patterns.join('|');
+    BAD_RE = union
+      ? new RegExp('(?:^|[^a-z0-9])(?:' + union + ')(?=$|[^a-z0-9])','i')
+      : null;
   }
 
   /* =============== FUZZY / PHONETIC HELPERS =============== */
@@ -712,11 +652,10 @@ TL.safety = (function(){
   function tokensForFuzzy(s){
     const base = collapseRepeats(canonicalStrong(s));
     const tokens = base.split(/\s+/).filter(Boolean);
-    const joined = base.replace(/\s+/g,''); // remove separators for sliding window
+    const joined = base.replace(/\s+/g,''); // for sliding windows
     return { tokens, joined, base };
   }
 
-  // Tiny Levenshtein
   function lev(a,b){
     const m=a.length, n=b.length;
     if (!m) return n; if (!n) return m;
@@ -732,7 +671,6 @@ TL.safety = (function(){
     return dp[n];
   }
 
-  // Quick phonetic-ish normalization to catch creative swaps
   function phoneticLite(hay){
     return hay
       .replace(/ph/g,'f')
@@ -741,7 +679,7 @@ TL.safety = (function(){
       .replace(/x/g,'ks')
       .replace(/z+/g,'s')
       .replace(/v+/g,'f')
-      .replace(/w+/g,'u'); // crude but helpful for a few cases
+      .replace(/w+/g,'u');
   }
 
   function looksSafeByContext(s){
@@ -753,7 +691,7 @@ TL.safety = (function(){
     const { tokens, joined } = tokensForFuzzy(text);
     if ((!tokens.length && !joined)) return false;
 
-    // Token-level edits (light)
+    // Token-level light edit distance
     for (const base of FUZZY_CORE){
       const bl = base.length;
       for (const t of tokens){
@@ -763,7 +701,7 @@ TL.safety = (function(){
       }
     }
 
-    // Joined sliding window across stripped punctuation/spacing
+    // Joined sliding window with phonetic aid
     if (joined){
       const scan = (hay) => {
         for (const base of FUZZY_CORE){
@@ -781,7 +719,6 @@ TL.safety = (function(){
         }
         return false;
       };
-
       if (scan(joined)) return true;
       if (scan(phoneticLite(joined))) return true;
     }
@@ -808,18 +745,20 @@ TL.safety = (function(){
   }
 
   function matchesBadWord(text){
-    // Two-pass: (1) exact phrase match on canonicalized text, (2) fuzzy/phonetic checks
     const strong = canonicalStrong(text);
-    if (BAD_RE && BAD_RE.test(` ${strong} `)) return true; // pad to keep \b safe
+    // 1) inflection-aware phrase/word regex on canonicalized text
+    if (BAD_RE && BAD_RE.test(` ${strong} `)) return true;
+    // 2) fuzzy/phonetic net
     return fuzzyBad(text);
   }
 
-  const needsNudge = (text) => matchesBadWord(text);
+  const needsNudge   = (text) => matchesBadWord(text);
   const isMatureText = (text) => matchesBadWord(text);
 
   return { loadFromDB, mergeBadWords, matchesBadWord, needsNudge, isMatureText };
 })();
 </script>
+
 
   <script>
   /* ============================================================
@@ -1609,6 +1548,7 @@ TL.safety = (function(){
 </script>
 </body>
 </html>
+
 
 
 
