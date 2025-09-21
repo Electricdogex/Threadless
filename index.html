@@ -1397,105 +1397,252 @@ TL.safety = (function(){
 
   <script>
   /* ============================================================
-   * [MODULE I] SUBSCRIPTIONS (realtime)
+   * [MODULE F] RENDERING — adds "pinned" visuals + top placement
+   *  - Pinned posts get a ribbon/badge + subtle glow
+   *  - appendRows() always places pinned at the very top
    * ============================================================ */
-  TL.live = (function(){
-    function subscribe(){
-      TL.sb.channel('threadless_posts')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
-          const row = payload.new;
-          TL.POST_MATURE.set(row.id, TL.visibility.rowIsMaturePost(row));
-          if (!TL.visibility.shouldRenderPost(row)) return;
-          const node = TL.render.renderPost(row);
-          if (node) { TL.els.feed.prepend(node); TL.data.hydrateReactions([row.id]); }
-        })
-        .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
-          const el = document.querySelector(`.post[data-id="${payload.old.id}"]`);
-          if (el) el.remove();
-          TL.POST_MATURE.delete(payload.old.id);
-        })
-        .subscribe((state)=>{ TL.util.showStatus(state === 'SUBSCRIBED' ? 'online' : state.toLowerCase()); });
+  TL.render = (function(){
+    const { els } = TL.util;
+    const { shouldRenderPost, rowIsMaturePost, rowIsMatureReply, shouldRenderReply, parentIsMature } = TL.visibility;
 
-      TL.sb.channel('threadless_reports')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
-          const pid = payload.new.post_id;
-          const check = await TL.sb.from(TL.SOURCE).select('id').eq('id', pid).maybeSingle();
-          if (!check.data){
-            const el = document.querySelector(`.post[data-id="${pid}"]`);
-            if (el) el.remove();
-            TL.POST_MATURE.delete(pid);
-          }
-        })
-        .subscribe();
+    /* --- one-time CSS injection for pinned visuals --- */
+    (function injectPinnedCSS(){
+      const styleId = 'tl-pinned-style';
+      if (document.getElementById(styleId)) return;
+      const s = document.createElement('style');
+      s.id = styleId;
+      s.textContent = `
+        /* Card state */
+        .post.pinned{
+          position: relative;
+          border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line) 45%) !important;
+          box-shadow:
+            0 8px 30px rgba(0,0,0,.35),
+            0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent) inset,
+            0 0 22px color-mix(in srgb, var(--accent) 25%, transparent);
+          background:
+            linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 38%),
+            var(--card) !important;
+        }
+        /* Corner ribbon */
+        .post.pinned .pin-badge{
+          position: absolute;
+          top: 8px; left: -10px;
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 6px 10px 6px 14px;
+          font: 700 11px/1 var(--font);
+          letter-spacing: .6px;
+          text-transform: uppercase;
+          color: var(--accent-2-ink, #1b120a);
+          background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #000 28%));
+          border: 1px solid color-mix(in srgb, var(--accent) 70%, #000 30%);
+          border-top-right-radius: 10px;
+          border-bottom-right-radius: 10px;
+          box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.18);
+          z-index: 2;
+        }
+        .post.pinned .pin-badge .dot{
+          width: 6px; height: 6px; border-radius: 999px;
+          background: var(--ink);
+          opacity: .8;
+          box-shadow: 0 0 8px rgba(255,255,255,.4);
+        }
+        /* Badge icon text */
+        .post.pinned .pin-badge .label{
+          display: inline-flex; align-items: center; gap: 6px;
+        }
 
-      if (TL.REACTIONS_AVAILABLE){
-        TL.sb.channel('threadless_reacts')
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
-            const { post_id, emoji } = payload.new;
-            const c = document.getElementById(`c_${post_id}_${emoji}`);
-            if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
-          })
-          .subscribe();
+        /* Subtle animated shimmer */
+        .post.pinned::after{
+          content: '';
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: radial-gradient(600px 200px at 10% -20%, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 55%);
+          opacity: .6;
+          border-radius: inherit;
+          mix-blend-mode: screen;
+          animation: tl-pin-glow 6s ease-in-out infinite;
+        }
+        @keyframes tl-pin-glow{
+          0%,100%{ opacity:.45 }
+          50%{ opacity:.7 }
+        }
+
+        /* Keep headerline tidy with ribbon present */
+        .post.pinned .headerline{ margin-top: 12px; }
+      `;
+      document.head.appendChild(s);
+    })();
+
+    function emojiRow(post){
+      const wrap = document.createElement('div');
+      wrap.className = 'actions';
+      if (!TL.REACTIONS_AVAILABLE) { wrap.style.display = 'none'; return wrap; }
+      const emojis = [
+        {key:'up',    label:'🔼'},
+        {key:'down',  label:'🔽'},
+        {key:'like',  label:'👍'},
+        {key:'lol',   label:'😂'},
+        {key:'heart', label:'❤️'},
+      ];
+      emojis.forEach(({key,label})=>{
+        const btn = document.createElement('button');
+        btn.className = 'emoji';
+        btn.dataset.key = key;
+        btn.innerHTML = `<span>${label}</span> <span class="count" id="c_${post.id}_${key}">0</span>`;
+        btn.addEventListener('click', ()=>TL.data.react(post.id, key, btn));
+        wrap.appendChild(btn);
+      });
+      const reportBtn = document.createElement('button');
+      reportBtn.className = 'report';
+      reportBtn.textContent = 'Report';
+      reportBtn.title = 'Report this post';
+      reportBtn.addEventListener('click', ()=>TL.data.report(post.id));
+      wrap.appendChild(reportBtn);
+      return wrap;
+    }
+
+    function repliesSection(post){
+      const box = document.createElement('div');
+      box.className = 'replies';
+      box.id = `replies_${post.id}`;
+
+      const rbox = document.createElement('div');
+      rbox.className = 'replybox';
+      const ta = document.createElement('textarea');
+      ta.placeholder = 'Write a reply… (Enter to send, Shift+Enter for newline)';
+      ta.maxLength = 1000;
+      const btn = document.createElement('button');
+      btn.className = 'btn rbtn';
+      btn.textContent = 'Reply';
+      btn.addEventListener('click', ()=>TL.actions.sendReply(post.id, ta));
+      ta.addEventListener('keydown', (e)=>{
+        if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); btn.click(); }
+      });
+      rbox.append(ta, btn);
+
+      box.append(rbox);
+      return box;
+    }
+
+    function renderReply(row){
+      const el = document.createElement('div');
+      el.className = 'reply';
+      el.dataset.id = row.id;
+      const head = document.createElement('div');
+      head.className = 'rhead';
+      const f = document.createElement('span'); f.className = 'rflair'; f.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
+      const dot = document.createElement('span'); dot.textContent = '·';
+      const t = document.createElement('span'); t.textContent = new Date(row.created_at).toLocaleString();
+      head.append(f, dot, t);
+      const body = document.createElement('div');
+      body.className = 'rcontent'; body.textContent = row.content;
+      el.append(head, body);
+      return el;
+    }
+
+    function renderPost(row){
+      const isMat = rowIsMaturePost(row);
+      TL.POST_MATURE.set(row.id, isMat);
+
+      if (!shouldRenderPost(row)) return null;
+      if (TL.seen.has(row.id)) return null;
+      TL.seen.add(row.id);
+
+      const el = document.createElement('div');
+      el.className = 'post';
+      el.dataset.id = row.id;
+
+      /* --- pinned badge & class --- */
+      const isPinned = !!row.pinned;
+      if (isPinned){
+        el.classList.add('pinned');
+        const badge = document.createElement('div');
+        badge.className = 'pin-badge';
+        badge.setAttribute('aria-label','Pinned');
+        badge.innerHTML = `<span class="label">📌 Pinned</span><span class="dot" aria-hidden="true"></span>`;
+        el.appendChild(badge);
       }
 
-      TL.sb.channel('threadless_replies')
-        .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
-          const r = payload.new;
-          if (TL.visibility.shouldRenderReply(r)){
-            const wrap = document.getElementById(`replies_${r.post_id}`);
-            if (wrap){
-              const node = TL.render.renderReply(r);
-              wrap.insertBefore(node, wrap.lastChild);
-            }
+      const head = document.createElement('div');
+      head.className = 'headerline';
+      const flair = document.createElement('span');
+      flair.className = 'flair';
+      flair.textContent = (TL.HAS_FLAIR && row.flair) ? row.flair : 'anon';
+      const dot = document.createElement('span'); dot.textContent = '·';
+      const time = document.createElement('span'); time.className = 'time';
+      time.textContent = new Date(row.created_at).toLocaleString();
+      head.append(flair, dot, time);
+
+      const content = document.createElement('div');
+      content.className = 'content';
+      content.textContent = row.content;
+
+      const actions = emojiRow(row);
+      const rsec = repliesSection(row);
+
+      el.append(head, content, actions, rsec);
+      return el;
+    }
+
+    /* Ensure pinned stay at the very top regardless of pagination order */
+    function appendRows(rows, {prepend=false} = {}){
+      if (!rows.length) return;
+
+      // Split into pinned/non-pinned, preserve original ordering within each group
+      const pinned = [];
+      const normal = [];
+      for (const r of rows){
+        TL.POST_MATURE.set(r.id, rowIsMaturePost(r)); // remember maturity even if hidden
+        const node = renderPost(r);
+        if (!node) continue;
+        (r.pinned ? pinned : normal).push(node);
+      }
+
+      // Insert pinned first (at the very top), then normal after existing nodes.
+      // To preserve order for pinned, insert them in reverse order when prepending at the top.
+      if (pinned.length){
+        for (let i = pinned.length - 1; i >= 0; i--){
+          els.feed.insertBefore(pinned[i], els.feed.firstChild);
+        }
+      }
+
+      // Normal posts: keep usual flow (append or prepend based on caller)
+      const frag = document.createDocumentFragment();
+      for (const n of normal) frag.appendChild(n);
+      if (prepend) els.feed.prepend(frag); else els.feed.appendChild(frag);
+    }
+
+    function groupBy(arr, key) {
+      const m = new Map();
+      for (const item of arr) {
+        const k = item[key];
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(item);
+      }
+      return m;
+    }
+
+    function renderRepliesBatch(groups) {
+      for (const [post_id, rows] of groups.entries()) {
+        const wrap = document.getElementById(`replies_${post_id}`);
+        if (!wrap) continue;
+        [...wrap.querySelectorAll('.reply')].forEach(n => n.remove());
+
+        const parentMat = TL.visibility.parentIsMature(post_id);
+        for (const r of rows) {
+          if (TL.SHOW_MATURE || (!parentMat && !TL.visibility.rowIsMatureReply(r))) {
+            wrap.insertBefore(renderReply(r), wrap.lastChild);
           }
-        })
-        .subscribe();
-    }
-    return { subscribe };
-  })();
-  </script>
-
-  <script>
-  /* ============================================================
-   * [MODULE J] PROMPTS
-   * ============================================================ */
-  TL.prompts = (function(){
-    const PROMPTS = [
-      "What’s a tiny habit that changed your life?",
-      "Describe a place you miss that no longer exists.",
-      "What’s something you believed as a kid that’s still kind of true?",
-      "Teach us a one-minute skill.",
-      "What’s the best question to ask a stranger?",
-      "Share an unpopular opinion you can defend politely.",
-      "What’s the most useful thing you learned this month?",
-      "Describe your ideal 15-minute break?",
-      "What’s a problem you solved in a weird way?",
-      "What’s a small joy from today?"
-    ];
-    function todayKey(){ const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; }
-
-    async function ensurePromptOfDay(){
-      const key = localStorage.getItem('threadless_prompt_date');
-      const today = todayKey();
-      if (key === today) return;
-
-      const start = new Date(); start.setHours(0,0,0,0);
-      const end = new Date(); end.setHours(23,59,59,999);
-
-      const { data, error } = await TL.sb.from(TL.SOURCE)
-        .select('id').gte('created_at', start.toISOString()).lte('created_at', end.toISOString())
-        .eq('flair','PromptBot').limit(1);
-      if (!error && data && data.length) { localStorage.setItem('threadless_prompt_date', today); return; }
-
-      const prompt = PROMPTS[Math.floor(Math.random()*PROMPTS.length)];
-      await TL.data.insertPost({ content: `Prompt of the day: ${prompt}`, flair: 'PromptBot' });
-      localStorage.setItem('threadless_prompt_date', today);
+        }
+      }
     }
 
-    return { ensurePromptOfDay };
+    return { emojiRow, renderReply, renderPost, appendRows, groupBy, renderRepliesBatch };
   })();
-  </script>
-
+</script>
+    
   <script>
   /* ============================================================
    * [MODULE K] BOOT / WIRING
@@ -1690,8 +1837,168 @@ TL.safety = (function(){
   }
 })();
 </script>
+
+<script>
+/* ============================================================
+ * [MODULE I] SUBSCRIPTIONS — pin-aware live updates
+ *  - INSERT: pinned → very top; non-pinned → after last pinned
+ *  - UPDATE: if pinned flag flips, move card between sections
+ *  - DELETE: remove card + clean bookkeeping
+ *  - Reactions/Replies: live, maturity stays client-side
+ * ============================================================ */
+TL.live = (function(){
+  const { shouldRenderPost, rowIsMaturePost, shouldRenderReply } = TL.visibility;
+
+  function insertAfterLastPinned(feed, node){
+    const lastPinned = feed.querySelector('.post.pinned:last-of-type');
+    if (lastPinned && lastPinned.nextSibling){
+      feed.insertBefore(node, lastPinned.nextSibling);
+    } else if (lastPinned){
+      feed.appendChild(node);
+    } else {
+      // no pinned yet — prepend newest to top
+      feed.prepend(node);
+    }
+  }
+
+  function ensurePinnedBadge(el, pinned){
+    if (!el) return;
+    if (pinned){
+      el.classList.add('pinned');
+      if (!el.querySelector('.pin-badge')){
+        const badge = document.createElement('div');
+        badge.className = 'pin-badge';
+        badge.setAttribute('aria-label','Pinned');
+        badge.innerHTML = `<span class="label">📌 Pinned</span><span class="dot" aria-hidden="true"></span>`;
+        el.insertBefore(badge, el.firstChild);
+      }
+    } else {
+      el.classList.remove('pinned');
+      const b = el.querySelector('.pin-badge');
+      if (b) b.remove();
+    }
+  }
+
+  function subscribe(){
+    const feed = TL.els.feed;
+
+    // POSTS: live insert
+    TL.sb.channel('threadless_posts')
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'posts' }, payload=>{
+        const row = payload.new;
+
+        // track parent maturity client-side
+        TL.POST_MATURE.set(row.id, rowIsMaturePost(row));
+        if (!shouldRenderPost(row)) return;
+
+        // already present? (possible with pagination races)
+        if (feed.querySelector(`.post[data-id="${row.id}"]`)) return;
+
+        const node = TL.render.renderPost(row);
+        if (!node) return;
+
+        if (row.pinned){
+          feed.insertBefore(node, feed.firstChild);
+        } else {
+          insertAfterLastPinned(feed, node);
+        }
+        TL.data.hydrateReactions([row.id]);
+      })
+
+      // POSTS: live delete
+      .on('postgres_changes', { event:'DELETE', schema:'public', table:'posts' }, payload=>{
+        const id = payload.old?.id;
+        const el = id && feed.querySelector(`.post[data-id="${id}"]`);
+        if (el) el.remove();
+        if (id) TL.POST_MATURE.delete(id);
+      })
+
+      // POSTS: live update (pin flip, etc.)
+      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'posts' }, payload=>{
+        const row = payload.new;
+        const old = payload.old || {};
+        TL.POST_MATURE.set(row.id, rowIsMaturePost(row));
+
+        // If it shouldn't render under current client setting, remove if present.
+        const el = feed.querySelector(`.post[data-id="${row.id}"]`);
+        if (!shouldRenderPost(row)){
+          if (el) el.remove();
+          return;
+        }
+
+        if (!el){
+          // Not on the page yet; let pagination place it later
+          return;
+        }
+
+        const pinnedBefore = !!old.pinned;
+        const pinnedAfter  = !!row.pinned;
+
+        // Keep top-of-board behavior if pin flips
+        if (pinnedBefore !== pinnedAfter){
+          ensurePinnedBadge(el, pinnedAfter);
+          el.remove(); // detach before reinserting
+          if (pinnedAfter){
+            feed.insertBefore(el, feed.firstChild);
+          } else {
+            insertAfterLastPinned(feed, el);
+          }
+        } else {
+          // No pin change; just ensure badge state & light content/time refresh
+          ensurePinnedBadge(el, pinnedAfter);
+          // Optional: update timestamp text if server mutated it
+          const t = el.querySelector('.time');
+          if (t && row.created_at) t.textContent = new Date(row.created_at).toLocaleString();
+        }
+      })
+      .subscribe((state)=>{
+        TL.util.showStatus(state === 'SUBSCRIBED' ? 'online' : (String(state||'').toLowerCase()));
+      });
+
+    // REPORTS: if a post gets moderated out of the source view, remove its card
+    TL.sb.channel('threadless_reports')
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'reports' }, async payload=>{
+        const pid = payload.new.post_id;
+        // Check visibility in current SOURCE (posts_public or posts)
+        const check = await TL.sb.from(TL.SOURCE).select('id').eq('id', pid).maybeSingle();
+        if (!check.data){
+          const el = feed.querySelector(`.post[data-id="${pid}"]`);
+          if (el) el.remove();
+          TL.POST_MATURE.delete(pid);
+        }
+      })
+      .subscribe();
+
+    // REACTIONS: live bumps if table exists
+    if (TL.REACTIONS_AVAILABLE){
+      TL.sb.channel('threadless_reacts')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'reactions' }, payload=>{
+          const { post_id, emoji } = payload.new || {};
+          const c = document.getElementById(`c_${post_id}_${emoji}`);
+          if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
+        })
+        .subscribe();
+    }
+
+    // REPLIES: append in real time (respecting client-side maturity)
+    TL.sb.channel('threadless_replies')
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'replies' }, payload=>{
+        const r = payload.new;
+        if (!shouldRenderReply(r)) return;
+        const wrap = document.getElementById(`replies_${r.post_id}`);
+        if (!wrap) return;
+        const node = TL.render.renderReply(r);
+        wrap.insertBefore(node, wrap.lastChild);
+      })
+      .subscribe();
+  }
+
+  return { subscribe };
+})();
+</script>
 </body>
 </html>
+
 
 
 
