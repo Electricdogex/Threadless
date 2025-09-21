@@ -1055,344 +1055,342 @@ TL.safety = (function(){
   </script>
 
   <script>
-  /* ============================================================
-   * [MODULE G] DATA (Supabase queries) — PINNED, no DB "mature"
-   *  - Pinned first, then newest (created_at desc, id desc)
-   *  - Keyset pagination across (pinned DESC, created_at DESC, id DESC)
-   *  - Auto-detect missing columns (flair, pinned) & retry
-   *  - No references to "mature" in DB (client-only maturity)
-   * ============================================================ */
-  TL.data = (function(){
-    let HAS_PINNED = true; // auto-detected on first fetch
+  //* ============================================================
+ * [MODULE G] DATA (Supabase queries) — PINNED, no DB "mature"
+ *  - Pinned first, then newest (created_at desc, id desc)
+ *  - Keyset pagination across (pinned DESC, created_at DESC, id DESC)
+ *  - Auto-detect missing columns (flair, pinned) & retry
+ *  - No references to "mature" in DB (client-only maturity)
+ * ============================================================ */
+TL.data = (function(){
+  let HAS_PINNED = true; // auto-detected on first fetch
 
-    /* ---------- helpers ---------- */
-    function isMissingColumn(error, name){
-      if (!error) return false;
-      const msg = (error.message || error.error_description || '').toLowerCase();
-      return msg.includes('column') && msg.includes(name.toLowerCase()) && msg.includes('does not exist');
+  /* ---------- helpers ---------- */
+  function isMissingColumn(error, name){
+    if (!error) return false;
+    const msg = (error.message || error.error_description || '').toLowerCase();
+    return msg.includes('column') && msg.includes(name.toLowerCase()) && msg.includes('does not exist');
+  }
+  function baseFields(){
+    let f = 'id, content, created_at';
+    if (TL.HAS_FLAIR) f += ', flair';
+    if (HAS_PINNED)   f += ', pinned';
+    return f;
+  }
+
+  /* ---------- reactions ---------- */
+  async function hydrateReactions(postIds){
+    const visible = postIds.filter(Boolean);
+    if (!TL.REACTIONS_AVAILABLE || !visible.length) return;
+    const { data, error, status } = await TL.sb.from('reactions')
+      .select('post_id, emoji').in('post_id', visible);
+
+    if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
+      TL.REACTIONS_AVAILABLE = false;
+      document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
+      return;
     }
+    if (error){ console.warn('reactions fetch error', error); return; }
 
-    function baseFields(){
-      let f = 'id, content, created_at';
-      if (TL.HAS_FLAIR) f += ', flair';
-      if (HAS_PINNED)   f += ', pinned';
-      return f;
+    const agg = {};
+    for (const r of (data||[])){ const k = `${r.post_id}:${r.emoji}`; agg[k] = (agg[k]||0)+1; }
+    for (const pid of visible){
+      ['up','down','like','lol','heart'].forEach(em=>{
+        const el = document.getElementById(`c_${pid}_${em}`);
+        if (el) el.textContent = agg[`${pid}:${em}`] || 0;
+      });
     }
+  }
 
-    /* ---------- reactions ---------- */
-    async function hydrateReactions(postIds){
-      const visible = postIds.filter(Boolean);
-      if (!TL.REACTIONS_AVAILABLE || !visible.length) return;
-      const { data, error, status } = await TL.sb.from('reactions')
-        .select('post_id, emoji').in('post_id', visible);
-
+  async function react(post_id, emoji, btn){
+    if (!TL.REACTIONS_AVAILABLE) return;
+    btn.disabled = true;
+    try{
+      const { error, status } = await TL.sb.from('reactions').insert({ post_id, session_tag: TL.session.tag, emoji });
       if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
         TL.REACTIONS_AVAILABLE = false;
         document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
         return;
       }
-      if (error){ console.warn('reactions fetch error', error); return; }
-
-      const agg = {};
-      for (const r of (data||[])){ const k = `${r.post_id}:${r.emoji}`; agg[k] = (agg[k]||0)+1; }
-      for (const pid of visible){
-        ['up','down','like','lol','heart'].forEach(em=>{
-          const el = document.getElementById(`c_${pid}_${em}`);
-          if (el) el.textContent = agg[`${pid}:${em}`] || 0;
-        });
+      if (error){ console.warn('reaction error', error.message || error.code); }
+      else{
+        const c = document.getElementById(`c_${post_id}_${emoji}`);
+        if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
       }
+    } finally { btn.disabled = false; }
+  }
+
+  /* ---------- reports ---------- */
+  async function report(post_id){
+    if (!confirm('Report this post for moderation?')) return;
+    const ins = await TL.sb.from('reports').insert({ post_id, session_tag: TL.session.tag });
+    if (ins.error){
+      alert('Already reported or failed.');
+      console.warn('report error', ins.error);
+      return;
+    }
+    const cnt = await TL.sb.from('reports')
+      .select('post_id', { count: 'exact', head: true })
+      .eq('post_id', post_id);
+    const total = cnt.count ?? 0;
+    if (total >= 3){
+      const node = document.querySelector(`.post[data-id="${post_id}"]`);
+      if (node) node.remove();
+      TL.util.toast('Post hidden by community');
+    } else {
+      TL.util.toast('Reported');
+    }
+  }
+
+  /* ---------- insert post (strip any accidental "mature") ---------- */
+  async function insertPost(payload){
+    // Ensure we never try to write a 'mature' column on posts
+    const { mature, ...safe } = payload || {};
+
+    if (TL.HAS_FLAIR){
+      const r1 = await TL.sb.from('posts').insert(safe);
+      if (!r1.error) return r1;
+
+      const e = r1.error;
+      if (TL.HAS_FLAIR && isMissingColumn(e, 'flair')){
+        TL.HAS_FLAIR = false;
+        return TL.sb.from('posts').insert({ content: safe.content });
+      }
+      return r1;
+    }
+    return TL.sb.from('posts').insert({ content: safe.content });
+  }
+
+  /* ---------- fetch page (pinned first) ---------- */
+  async function fetchPage(cursor){
+    let q = TL.sb.from(TL.SOURCE)
+      .select(baseFields())
+      .order('created_at', { ascending:false })
+      .order('id', { ascending:false });
+
+    if (HAS_PINNED){
+      q = q.order('pinned', { ascending:false, nullsFirst:true });
     }
 
-    async function react(post_id, emoji, btn){
-      if (!TL.REACTIONS_AVAILABLE) return;
-      btn.disabled = true;
-      try{
-        const { error, status } = await TL.sb.from('reactions').insert({ post_id, session_tag: TL.session.tag, emoji });
-        if (status === 404 || (error && /reactions.*not.*found/i.test(error.message||''))){
-          TL.REACTIONS_AVAILABLE = false;
-          document.querySelectorAll('.actions').forEach(a => a.style.display = 'none');
-          return;
-        }
-        if (error){ console.warn('reaction error', error.message || error.code); }
-        else{
-          const c = document.getElementById(`c_${post_id}_${emoji}`);
-          if (c) c.textContent = String((parseInt(c.textContent||'0',10))+1);
-        }
-      } finally { btn.disabled = false; }
-    }
-
-    /* ---------- reports ---------- */
-    async function report(post_id){
-      if (!confirm('Report this post for moderation?')) return;
-      const ins = await TL.sb.from('reports').insert({ post_id, session_tag: TL.session.tag });
-      if (ins.error){
-        alert('Already reported or failed.');
-        console.warn('report error', ins.error);
-        return;
-      }
-      const cnt = await TL.sb.from('reports')
-        .select('post_id', { count: 'exact', head: true })
-        .eq('post_id', post_id);
-      const total = cnt.count ?? 0;
-      if (total >= 3){
-        const node = document.querySelector(`.post[data-id="${post_id}"]`);
-        if (node) node.remove();
-        TL.util.toast('Post hidden by community');
+    // Keyset pagination
+    if (cursor){
+      if (HAS_PINNED && typeof cursor.pinned === 'boolean'){
+        const curPinned = cursor.pinned ? 'true' : 'false';
+        const cts = cursor.created_at;
+        const cid = cursor.id;
+        q = q.or([
+          `pinned.lt.${curPinned}`,
+          `and(pinned.eq.${curPinned},created_at.lt.${cts})`,
+          `and(pinned.eq.${curPinned},created_at.eq.${cts},id.lt.${cid})`
+        ].join(','));
       } else {
-        TL.util.toast('Reported');
+        const cts = cursor.created_at;
+        const cid = cursor.id;
+        q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
       }
     }
 
-    /* ---------- insert post (no DB "mature") ---------- */
-    async function insertPost(payload){
-      // Only 'flair' is optional; no 'mature' writes.
-      if (TL.HAS_FLAIR){
-        const r1 = await TL.sb.from('posts').insert(payload);
-        if (!r1.error) return r1;
-        const e = r1.error;
-        if (TL.HAS_FLAIR && isMissingColumn(e, 'flair')){
-          TL.HAS_FLAIR = false;
-          return TL.sb.from('posts').insert({ content: payload.content });
-        }
-        return r1;
-      }
-      return TL.sb.from('posts').insert({ content: payload.content });
+    q = q.limit(TL.PAGE_SIZE);
+
+    const { data, error, status } = await q;
+
+    // Fallback to base table if view missing
+    if ((status === 404 && TL.SOURCE === 'posts_public') ||
+        (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
+      TL.SOURCE = 'posts';
+      TL.util.showStatus('fallback');
+      return fetchPage(cursor);
     }
 
-    /* ---------- fetch page (pinned first) ---------- */
-    async function fetchPage(cursor){
-      let q = TL.sb.from(TL.SOURCE)
-        .select(baseFields())
-        .order('created_at', { ascending:false })
-        .order('id', { ascending:false });
-
-      // Pinned first when available
-      if (HAS_PINNED){
-        q = q.order('pinned', { ascending:false, nullsFirst:true });
-      }
-
-      // Client-only maturity: no DB filter here.
-
-      // Keyset pagination
-      if (cursor){
-        if (HAS_PINNED && typeof cursor.pinned === 'boolean'){
-          // (pinned < curPinned) OR (pinned = curPinned AND created_at < ts) OR (pinned = curPinned AND created_at = ts AND id < id)
-          const curPinned = cursor.pinned ? 'true' : 'false';
-          const cts = cursor.created_at;
-          const cid = cursor.id;
-          q = q.or([
-            `pinned.lt.${curPinned}`,
-            `and(pinned.eq.${curPinned},created_at.lt.${cts})`,
-            `and(pinned.eq.${curPinned},created_at.eq.${cts},id.lt.${cid})`
-          ].join(','));
-        } else {
-          const cts = cursor.created_at;
-          const cid = cursor.id;
-          q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
-        }
-      }
-
-      q = q.limit(TL.PAGE_SIZE);
-
-      const { data, error, status } = await q;
-
-      // Fallback to base table if view missing
-      if ((status === 404 && TL.SOURCE === 'posts_public') ||
-          (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
-        TL.SOURCE = 'posts';
-        TL.util.showStatus('fallback');
+    // Auto-disable missing columns and retry once
+    if (status === 400 || error){
+      if (TL.HAS_FLAIR && isMissingColumn(error, 'flair')){
+        TL.HAS_FLAIR = false;
         return fetchPage(cursor);
       }
-
-      // Auto-disable missing columns and retry once
-      if (status === 400 || error){
-        if (TL.HAS_FLAIR && isMissingColumn(error, 'flair')){
-          TL.HAS_FLAIR = false;
-          return fetchPage(cursor);
-        }
-        if (HAS_PINNED && isMissingColumn(error, 'pinned')){
-          HAS_PINNED = false;
-          return fetchPage(cursor);
-        }
+      if (HAS_PINNED && isMissingColumn(error, 'pinned')){
+        HAS_PINNED = false;
+        return fetchPage(cursor);
       }
-
-      if (error){
-        console.error('SELECT error:', error);
-        TL.util.showStatus(error.message || 'load error');
-        return { rows:[], hasMore:false, newCursor:null };
-      }
-
-      const rows = (data || []).filter(r => TL.visibility.shouldRenderPost(r));
-
-      const last = rows[rows.length - 1] || null;
-      const hasMore = (data||[]).length === TL.PAGE_SIZE;
-
-      const newCursor = last
-        ? (HAS_PINNED
-            ? { pinned: !!last.pinned, created_at: last.created_at, id: last.id }
-            : { created_at: last.created_at, id: last.id })
-        : null;
-
-      return { rows, hasMore, newCursor };
     }
 
-    /* ---------- replies (no DB "mature") ---------- */
-    async function loadRepliesForPosts(postIds){
-      if (!postIds.length) return;
-      let sel = 'id, post_id, content, created_at';
-      if (TL.HAS_FLAIR) sel += ', flair';
-
-      let q = TL.sb.from('replies')
-        .select(sel)
-        .in('post_id', postIds)
-        .order('post_id', { ascending: true })
-        .order('created_at', { ascending: true });
-
-      const { data, error, status } = await q;
-
-      if ((status === 400 || error) && TL.HAS_FLAIR && isMissingColumn(error, 'flair')){
-        TL.HAS_FLAIR = false;
-        return loadRepliesForPosts(postIds);
-      }
-      if (error){ console.warn('replies bulk load error', error); return; }
-
-      const grouped = TL.render.groupBy(data || [], 'post_id');
-      TL.render.renderRepliesBatch(grouped);
+    if (error){
+      console.error('SELECT error:', error);
+      TL.util.showStatus(error.message || 'load error');
+      return { rows:[], hasMore:false, newCursor:null };
     }
 
-    async function loadReplies(post_id){
-      let sel = 'id, post_id, content, created_at';
-      if (TL.HAS_FLAIR) sel += ', flair';
+    const rows = (data || []).filter(r => TL.visibility.shouldRenderPost(r));
 
-      let q = TL.sb.from('replies')
-        .select(sel)
-        .eq('post_id', post_id)
-        .order('created_at', { ascending: true })
-        .limit(200);
+    const last = rows[rows.length - 1] || null;
+    const hasMore = (data||[]).length === TL.PAGE_SIZE;
 
-      const { data, error, status } = await q;
+    const newCursor = last
+      ? (HAS_PINNED
+          ? { pinned: !!last.pinned, created_at: last.created_at, id: last.id }
+          : { created_at: last.created_at, id: last.id })
+      : null;
 
-      if ((status === 400 || error) && TL.HAS_FLAIR && isMissingColumn(error, 'flair')){
-        TL.HAS_FLAIR = false;
-        return loadReplies(post_id);
-      }
-      if (error){ console.warn('replies load error', error); return; }
+    return { rows, hasMore, newCursor };
+  }
 
-      const m = new Map([[post_id, data || []]]);
-      TL.render.renderRepliesBatch(m);
+  /* ---------- replies (no DB "mature") ---------- */
+  async function loadRepliesForPosts(postIds){
+    if (!postIds.length) return;
+    let sel = 'id, post_id, content, created_at';
+    if (TL.HAS_FLAIR) sel += ', flair';
+
+    let q = TL.sb.from('replies')
+      .select(sel)
+      .in('post_id', postIds)
+      .order('post_id', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    const { data, error, status } = await q;
+
+    if ((status === 400 || error) && TL.HAS_FLAIR && isMissingColumn(error, 'flair')){
+      TL.HAS_FLAIR = false;
+      return loadRepliesForPosts(postIds);
     }
+    if (error){ console.warn('replies bulk load error', error); return; }
 
-    return { hydrateReactions, react, report, insertPost, fetchPage, loadRepliesForPosts, loadReplies };
-  })();
+    const grouped = TL.render.groupBy(data || [], 'post_id');
+    TL.render.renderRepliesBatch(grouped);
+  }
+
+  async function loadReplies(post_id){
+    let sel = 'id, post_id, content, created_at';
+    if (TL.HAS_FLAIR) sel += ', flair';
+
+    let q = TL.sb.from('replies')
+      .select(sel)
+      .eq('post_id', post_id)
+      .order('created_at', { ascending: true })
+      .limit(200);
+
+    const { data, error, status } = await q;
+
+    if ((status === 400 || error) && TL.HAS_FLAIR && isMissingColumn(error, 'flair')){
+      TL.HAS_FLAIR = false;
+      return loadReplies(post_id);
+    }
+    if (error){ console.warn('replies load error', error); return; }
+
+    const m = new Map([[post_id, data || []]]);
+    TL.render.renderRepliesBatch(m);
+  }
+
+  return { hydrateReactions, react, report, insertPost, fetchPage, loadRepliesForPosts, loadReplies };
+})();
 </script>
     
-  <script>
+<script>
   /* ============================================================
-   * [MODULE H] ACTIONS (posting, pagination, reload, replies)
-   * ============================================================ */
-  TL.actions = (function(){
-    const { els, sanitize, getCooldownLeft, setJustPosted } = TL.util;
+ * [MODULE H] ACTIONS (posting, pagination, reload, replies)
+ *  - Posts: no DB 'mature' writes (client-only)
+ * ============================================================ */
+TL.actions = (function(){
+  const { els, sanitize, getCooldownLeft, setJustPosted } = TL.util;
 
-    async function initialLoad(){
-      const { rows, hasMore, newCursor } = await TL.data.fetchPage(null);
-      els.feed.innerHTML = '';
-      TL.render.appendRows(rows);
-      await TL.data.hydrateReactions(rows.map(r=>r.id));
-      await TL.data.loadRepliesForPosts(rows.map(r => r.id));
-      TL.nextCursor = newCursor;
-      updatePager(hasMore);
-    }
+  async function initialLoad(){
+    const { rows, hasMore, newCursor } = await TL.data.fetchPage(null);
+    els.feed.innerHTML = '';
+    TL.render.appendRows(rows);
+    await TL.data.hydrateReactions(rows.map(r=>r.id));
+    await TL.data.loadRepliesForPosts(rows.map(r => r.id));
+    TL.nextCursor = newCursor;
+    updatePager(hasMore);
+  }
 
-    function updatePager(hasMore){
-      els.loadMoreBtn.disabled = !hasMore;
-      els.moreLabel.textContent = hasMore ? 'Load more' : 'No more posts';
-    }
-    function setLoading(v){
-      els.loadMoreBtn.disabled = v;
-      els.moreSpin.style.display = v ? 'inline-block' : 'none';
-      els.moreLabel.textContent = v ? 'Loading…' : 'Load more';
-    }
+  function updatePager(hasMore){
+    els.loadMoreBtn.disabled = !hasMore;
+    els.moreLabel.textContent = hasMore ? 'Load more' : 'No more posts';
+  }
+  function setLoading(v){
+    els.loadMoreBtn.disabled = v;
+    els.moreSpin.style.display = v ? 'inline-block' : 'none';
+    els.moreLabel.textContent = v ? 'Loading…' : 'Load more';
+  }
 
-    async function loadMore(){
-      if (els.loadMoreBtn.disabled) return;
-      setLoading(true);
-      const { rows, hasMore, newCursor } = await TL.data.fetchPage(TL.nextCursor);
-      TL.render.appendRows(rows);
-      await TL.data.hydrateReactions(rows.map(r=>r.id));
-      await TL.data.loadRepliesForPosts(rows.map(r => r.id));
-      TL.nextCursor = newCursor;
-      updatePager(hasMore);
-      setLoading(false);
-    }
+  async function loadMore(){
+    if (els.loadMoreBtn.disabled) return;
+    setLoading(true);
+    const { rows, hasMore, newCursor } = await TL.data.fetchPage(TL.nextCursor);
+    TL.render.appendRows(rows);
+    await TL.data.hydrateReactions(rows.map(r=>r.id));
+    await TL.data.loadRepliesForPosts(rows.map(r => r.id));
+    TL.nextCursor = newCursor;
+    updatePager(hasMore);
+    setLoading(false);
+  }
 
-    async function reloadFeed(){
-      TL.seen.clear();
-      TL.nextCursor = null;
-      TL.POST_MATURE.clear();
-      els.feed.innerHTML = '';
-      await initialLoad();
-    }
+  async function reloadFeed(){
+    TL.seen.clear();
+    TL.nextCursor = null;
+    TL.POST_MATURE.clear();
+    els.feed.innerHTML = '';
+    await initialLoad();
+  }
 
-    async function sendReply(post_id, textarea){
-      const content = sanitize(textarea.value);
-      if (!content) return;
-      if (TL.safety.needsNudge(content)){
-        const ok = confirm('This reply may be uncivil or mature. Are you sure you want to post it?');
-        if (!ok) return;
-      }
-      textarea.disabled = true;
-      try{
-        let payload = { post_id, content, flair: TL.session.tag };
-        if (TL.HAS_MATURE_REPLIES) payload.mature = TL.safety.isMatureText(content);
-        const r = await TL.sb.from('replies').insert(payload);
-        if (r.error){
-          if (r.error.code === '42703' || /mature.*does not exist/i.test(r.error.message||'')) {
-            TL.HAS_MATURE_REPLIES = false;
-            await TL.sb.from('replies').insert({ post_id, content, flair: TL.session.tag });
-          } else {
-            throw r.error;
-          }
+  async function sendReply(post_id, textarea){
+    const content = sanitize(textarea.value);
+    if (!content) return;
+    if (TL.safety.needsNudge(content)){
+      const ok = confirm('This reply may be uncivil or mature. Are you sure you want to post it?');
+      if (!ok) return;
+    }
+    textarea.disabled = true;
+    try{
+      let payload = { post_id, content, flair: TL.session.tag };
+      if (TL.HAS_MATURE_REPLIES) payload.mature = TL.safety.isMatureText(content);
+      const r = await TL.sb.from('replies').insert(payload);
+      if (r.error){
+        if (r.error.code === '42703' || /mature.*does not exist/i.test(r.error.message||'')) {
+          TL.HAS_MATURE_REPLIES = false;
+          await TL.sb.from('replies').insert({ post_id, content, flair: TL.session.tag });
+        } else {
+          throw r.error;
         }
-        textarea.value = '';
-        TL.data.loadReplies(post_id);
-      }catch(e){
-        alert('Reply failed: ' + (e?.message || 'see console'));
-        console.error(e);
-      }finally{
-        textarea.disabled = false;
       }
+      textarea.value = '';
+      TL.data.loadReplies(post_id);
+    }catch(e){
+      alert('Reply failed: ' + (e?.message || 'see console'));
+      console.error(e);
+    }finally{
+      textarea.disabled = false;
+    }
+  }
+
+  async function post(){
+    const left = getCooldownLeft();
+    if (left>0){ TL.els.cool.textContent = left; return; }
+    const content = TL.util.sanitize(TL.els.text.value);
+    if (!content) return;
+
+    if (TL.safety.needsNudge(content)){
+      const ok = confirm('This post may be uncivil or mature. Are you sure you want to post it?');
+      if (!ok) return;
     }
 
-    async function post(){
-      const left = getCooldownLeft();
-      if (left>0){ TL.els.cool.textContent = left; return; }
-      const content = TL.util.sanitize(TL.els.text.value);
-      if (!content) return;
+    TL.els.postBtn.disabled = true;
+    try{
+      // Posts: client-only maturity — do NOT write a DB column
+      const { error } = await TL.data.insertPost({ content, flair: TL.session.tag });
+      if (error) throw error;
+      TL.els.text.value = '';
+      TL.els.count.textContent = '0';
+      setJustPosted();
+      TL.util.toast('Posted!');
+    }catch(e){
+      alert('Post failed: ' + (e?.message || 'see console'));
+      console.error(e);
+      TL.util.showStatus(e?.message || 'insert error');
+    }finally{ TL.els.postBtn.disabled = false; }
+  }
 
-      if (TL.safety.needsNudge(content)){
-        const ok = confirm('This post may be uncivil or mature. Are you sure you want to post it?');
-        if (!ok) return;
-      }
-
-      TL.els.postBtn.disabled = true;
-      try{
-        let payload = { content, flair: TL.session.tag };
-        if (TL.HAS_MATURE_POSTS) payload.mature = TL.safety.isMatureText(content);
-        const { error } = await TL.data.insertPost(payload);
-        if (error) throw error;
-        TL.els.text.value = '';
-        TL.els.count.textContent = '0';
-        setJustPosted();
-        TL.util.toast('Posted!');
-      }catch(e){
-        alert('Post failed: ' + (e?.message || 'see console'));
-        console.error(e);
-        TL.util.showStatus(e?.message || 'insert error');
-      }finally{ TL.els.postBtn.disabled = false; }
-    }
-
-    return { initialLoad, loadMore, reloadFeed, sendReply, post, updatePager };
-  })();
+  return { initialLoad, loadMore, reloadFeed, sendReply, post, updatePager };
+})();
   </script>
 
   <script>
@@ -1998,6 +1996,7 @@ TL.live = (function(){
 </script>
 </body>
 </html>
+
 
 
 
