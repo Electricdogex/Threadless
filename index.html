@@ -1056,9 +1056,14 @@ TL.safety = (function(){
 
   <script>
   /* ============================================================
-   * [MODULE G] DATA (Supabase queries)
+   * [MODULE G] DATA (Supabase queries) — with PINNED support
+   *  - New: respects boolean column `pinned` (true = floats first)
+   *  - Keyset pagination across (pinned DESC, created_at DESC, id DESC)
+   *  - Backward compatible if `pinned` column not present
    * ============================================================ */
   TL.data = (function(){
+    let HAS_PINNED = true; // auto-detect on first fetch
+
     async function hydrateReactions(postIds){
       const visible = postIds.filter(Boolean);
       if (!TL.REACTIONS_AVAILABLE || !visible.length) return;
@@ -1135,36 +1140,71 @@ TL.safety = (function(){
       return TL.sb.from('posts').insert({ content: payload.content });
     }
 
-    async function fetchPage(cursor){
-      const baseFields = 'id, content, created_at'
-        + (TL.HAS_FLAIR ? ', flair' : '')
-        + (TL.HAS_MATURE_POSTS ? ', mature' : '');
+    // Helper to build select list depending on available columns
+    function baseFields(){
+      let f = 'id, content, created_at';
+      if (TL.HAS_FLAIR) f += ', flair';
+      if (TL.HAS_MATURE_POSTS) f += ', mature';
+      if (HAS_PINNED) f += ', pinned';
+      return f;
+    }
 
+    // Fetch a page, ordered by pinned DESC, created_at DESC, id DESC when available.
+    async function fetchPage(cursor){
       let q = TL.sb.from(TL.SOURCE)
-        .select(baseFields)
+        .select(baseFields())
         .order('created_at', { ascending:false })
-        .order('id', { ascending:false })
-        .limit(TL.PAGE_SIZE);
+        .order('id', { ascending:false });
+
+      // If pinned exists, move it to the top of ordering
+      if (HAS_PINNED){
+        q = q.order('pinned', { ascending:false, nullsFirst:true });
+      }
 
       if (!TL.SHOW_MATURE && TL.HAS_MATURE_POSTS) q = q.eq('mature', false);
 
+      // Keyset pagination across (pinned DESC, created_at DESC, id DESC)
       if (cursor){
-        // IMPORTANT: use raw ISO, not URL-encoded (fixes invalid timestamp bug)
-        const cts = cursor.created_at;
-        const cid = cursor.id;
-        q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
+        if (HAS_PINNED && typeof cursor.pinned === 'boolean'){
+          // (pinned < curPinned) OR (pinned = curPinned AND created_at < cts) OR (pinned = curPinned AND created_at = cts AND id < cid)
+          const curPinned = cursor.pinned ? 'true' : 'false';
+          const cts = cursor.created_at;
+          const cid = cursor.id;
+          q = q.or([
+            `pinned.lt.${curPinned}`,
+            `and(pinned.eq.${curPinned},created_at.lt.${cts})`,
+            `and(pinned.eq.${curPinned},created_at.eq.${cts},id.lt.${cid})`
+          ].join(','));
+        } else {
+          // Back-compat: paginate on created_at, id only
+          const cts = cursor.created_at;
+          const cid = cursor.id;
+          q = q.or(`created_at.lt.${cts},and(created_at.eq.${cts},id.lt.${cid})`);
+        }
       }
+
+      q = q.limit(TL.PAGE_SIZE);
 
       const { data, error, status } = await q;
 
+      // If posts_public not present, fall back to 'posts'
       if ((status === 404 && TL.SOURCE === 'posts_public') ||
           (error && ((error.code === '42P01') || /posts_public/i.test(error.message||'')))){
         TL.SOURCE = 'posts'; TL.util.showStatus('fallback'); return fetchPage(cursor);
       }
 
-      if (status === 400 || (error && (error.code === '42703'))){
-        if (/flair.*does not exist/i.test(error?.message||'')) { if (TL.HAS_FLAIR){ TL.HAS_FLAIR = false; return fetchPage(cursor);} }
-        if (/mature.*does not exist/i.test(error?.message||'')) { if (TL.HAS_MATURE_POSTS){ TL.HAS_MATURE_POSTS = false; return fetchPage(cursor);} }
+      // If 'pinned' column doesn't exist yet, fall back gracefully once
+      if (error && (error.code === '42703' || /column.*pinned.*does not exist/i.test(error.message||''))){
+        HAS_PINNED = false;
+        return fetchPage(cursor); // retry without pinned
+      }
+
+      // Handle other optional columns
+      if (status === 400 || error){
+        if (error){
+          if (/flair.*does not exist/i.test(error.message||'')) { if (TL.HAS_FLAIR){ TL.HAS_FLAIR = false; return fetchPage(cursor);} }
+          if (/mature.*does not exist/i.test(error.message||'')) { if (TL.HAS_MATURE_POSTS){ TL.HAS_MATURE_POSTS = false; return fetchPage(cursor);} }
+        }
       }
 
       if (error){
@@ -1174,9 +1214,19 @@ TL.safety = (function(){
       }
 
       const rows = (data || []).filter(r => TL.visibility.shouldRenderPost(r));
-      const last = (data || [])[ (data||[]).length - 1 ] || null;
+
+      // Build next cursor from the last visible row
+      const last = rows[ rows.length - 1 ] || null;
       const hasMore = (data||[]).length === TL.PAGE_SIZE;
-      return { rows, hasMore, newCursor: last ? { created_at: last.created_at, id: last.id } : null };
+
+      let newCursor = null;
+      if (last){
+        newCursor = HAS_PINNED
+          ? { pinned: !!last.pinned, created_at: last.created_at, id: last.id }
+          : { created_at: last.created_at, id: last.id };
+      }
+
+      return { rows, hasMore, newCursor };
     }
 
     async function loadRepliesForPosts(postIds){
@@ -1222,7 +1272,7 @@ TL.safety = (function(){
 
     return { hydrateReactions, react, report, insertPost, fetchPage, loadRepliesForPosts, loadReplies };
   })();
-  </script>
+</script>
 
   <script>
   /* ============================================================
@@ -1630,6 +1680,7 @@ TL.safety = (function(){
 </script>
 </body>
 </html>
+
 
 
 
