@@ -63,6 +63,20 @@
     --btn-ink:#ffffff;
   }
 
+  /* === Halloween theme 🎃 === */
+  [data-theme="halloween"]{
+    --bg:#0b0a12;         /* deep night purple */
+    --card:#13111b;       /* cauldron shadow */
+    --ink:#f7efe4;        /* candlecream */
+    --muted:#b7a8c6;      /* dusty lilac */
+    --line:#241f33;       /* witching-hour border */
+    --accent:#ff7a00;     /* pumpkin orange */
+    --accent-2:#39ff88;   /* ecto green */
+    --accent-2-ink:#02150a;
+    --warn:#ffd39b;
+    --btn-ink:#1a0e05;
+  }
+
   *{box-sizing:border-box}
   html,body{height:100%}
   body{
@@ -84,6 +98,20 @@
       repeating-linear-gradient(0deg, rgba(255,255,255,.025), rgba(255,255,255,.025) 2px, transparent 2px, transparent 6px),
       var(--bg) !important;
   }
+  /* Halloween: moon, stars, faint fog */
+  [data-theme="halloween"] body{
+    background:
+      /* moon */
+      radial-gradient(180px 180px at 85% 12%, rgba(255,245,200,.9) 0 35%, rgba(255,245,200,.06) 36% 45%, transparent 46%),
+      /* drifting fog bands */
+      radial-gradient(1200px 500px at -10% 0%, rgba(90,70,140,.18) 0 30%, transparent 55%),
+      radial-gradient(900px 400px at 120% -10%, rgba(90,70,140,.14) 0 30%, transparent 60%),
+      /* tiny stars */
+      repeating-radial-gradient(circle at 10% 20%, rgba(255,255,255,.12) 0 1px, transparent 1px 40px),
+      repeating-radial-gradient(circle at 70% 40%, rgba(255,255,255,.10) 0 1px, transparent 1px 36px),
+      var(--bg) !important;
+    background-attachment: fixed, fixed, fixed, fixed, fixed, fixed;
+  }
 
   header{ position:sticky; top:0; z-index:3; background:linear-gradient(180deg, color-mix(in srgb, var(--card) 85%, transparent), transparent); backdrop-filter: blur(6px); border-bottom:1px solid var(--line) }
   [data-theme="x"] header{
@@ -97,6 +125,14 @@
       repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 4px);
     backdrop-filter: blur(4px);
     border-bottom:1px solid var(--line);
+  }
+  /* Halloween header cobweb sheen */
+  [data-theme="halloween"] header{
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--card) 82%, transparent), transparent),
+      conic-gradient(from 45deg at 100% 0%, rgba(255,255,255,.04) 0 10%, transparent 10% 20%, rgba(255,255,255,.04) 20% 30%, transparent 30% 40%, rgba(255,255,255,.04) 40% 50%, transparent 50% 100%);
+    border-bottom:1px solid var(--line);
+    backdrop-filter: blur(5px);
   }
 
   .wrap{max-width:860px;margin:0 auto;padding:16px}
@@ -121,6 +157,15 @@
     width:auto; height:auto;
     background:none; box-shadow:none; transform:none;
     color:var(--accent); font:800 16px/1 var(--font); letter-spacing:.5px;
+  }
+  /* Halloween badge (pumpkin) */
+  [data-theme="halloween"] .logo{ background:linear-gradient(145deg, #100e19, #0b0a12); border-color:var(--line); }
+  [data-theme="halloween"] .logo::after{
+    content:'🎃';
+    width:auto; height:auto;
+    background:none; box-shadow:none; transform:none;
+    font: 18px/1 var(--font);
+    filter: drop-shadow(0 2px 0 rgba(0,0,0,.35));
   }
 
   .alpha{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--accent-2-ink); background:linear-gradient(180deg, var(--accent-2), color-mix(in srgb, var(--accent-2) 75%, #000 0%)); border:1px solid color-mix(in srgb, var(--accent-2) 65%, black); border-radius:999px; padding:6px 10px; box-shadow:0 4px 14px color-mix(in srgb, var(--accent-2) 25%, transparent), inset 0 1px 0 rgba(255,255,255,.08) }
@@ -148,6 +193,20 @@
     border-radius:12px;
     box-shadow:none;
   }
+  /* Halloween: subtle orange edge glow on posts */
+  [data-theme="halloween"] .post{
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 35%),
+      var(--card);
+    border:1px solid var(--line);
+    box-shadow: 0 0 0 1px rgba(255,122,0,.06), 0 18px 40px rgba(0,0,0,.35);
+  }
+  [data-theme="halloween"] .composer, 
+  [data-theme="halloween"] .reply{
+    background: var(--card);
+    border-color: var(--line);
+    box-shadow: 0 0 0 1px rgba(57,255,136,.05), 0 10px 24px rgba(0,0,0,.3);
+  }
 
   textarea{ width:100%; min-height:110px; background:color-mix(in srgb, var(--bg) 90%, black 10%); color:var(--ink); border:1px solid color-mix(in srgb, var(--line) 75%, black 25%); border-radius:12px; padding:12px; resize:vertical; outline:none }
   textarea:focus{ border-color:color-mix(in srgb, var(--accent-2) 60%, #000 40%); box-shadow:0 0 0 4px color-mix(in srgb, var(--accent-2) 20%, transparent) }
@@ -158,6 +217,10 @@
   [data-theme="buran"] textarea:focus{
     border-color: color-mix(in srgb, var(--accent-2) 70%, #000 30%);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 25%, transparent);
+  }
+  [data-theme="halloween"] textarea:focus{
+    border-color: color-mix(in srgb, var(--accent) 70%, #000 30%);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
   }
 
   .row{display:flex; gap:12px; align-items:center; margin-top:10px}
@@ -170,6 +233,15 @@
   [data-theme="buran"] .btn{
     background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 75%, #000 25%));
     color: var(--btn-ink, #fff);
+  }
+  /* Halloween: candy-corn gradient + pulsing glow on hover */
+  [data-theme="halloween"] .btn{
+    background: linear-gradient(180deg, #ffd972, #ff9b2f 35%, #ff7a00 70%);
+    color:#1a0e05;
+    box-shadow: 0 8px 22px rgba(255, 122, 0, .25), inset 0 1px 0 rgba(255,255,255,.18);
+  }
+  [data-theme="halloween"] .btn:hover{
+    box-shadow: 0 0 0 3px rgba(57,255,136,.18), 0 10px 26px rgba(255, 122, 0, .35);
   }
 
   .meta{margin-left:auto; color:var(--muted); font-size:12px}
@@ -195,6 +267,11 @@
     background:#0b0c0e;
     border-color:var(--line);
   }
+  [data-theme="halloween"] .emoji,
+  [data-theme="halloween"] .pager .load-more{
+    background: #0f0d17;
+    border-color: #2a2338;
+  }
 
   .emoji[disabled]{opacity:.5; cursor:not-allowed}
   .count{color:var(--ink)}
@@ -204,6 +281,7 @@
   [data-theme="x"] .report:hover{ color:var(--ink); border-color:var(--accent); }
   [data-theme="buran"] .report{ background:#0b0c0e; border-color:var(--line); color:var(--muted); }
   [data-theme="buran"] .report:hover{ color:var(--ink); border-color:var(--accent); }
+  [data-theme="halloween"] .report:hover{ color:var(--ink); border-color:var(--accent); }
 
   .notice{margin-top:8px; color:var(--warn); font-size:12px}
   a{color:var(--accent); text-decoration:none}
@@ -228,6 +306,10 @@
 
   footer{color:var(--muted); font-size:12px; margin:36px 0; text-align:center}
   footer .copyright{margin-top:8px; color:var(--muted); font-size:11px}
+  /* Halloween: a tiny ghost after the tip */
+  [data-theme="halloween"] footer div:first-child::after{
+    content:"  👻";
+  }
 
   .toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--line); color:var(--ink); padding:10px 14px; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.25); font-size:13px; display:none}
 </style>
@@ -257,6 +339,7 @@
   <option value="mono">Mono</option>
   <option value="x">X</option>
   <option value="buran">Buran</option>
+  <option value="halloween">Halloween 🎃</option>
 </select>
 
           </div>
@@ -1547,6 +1630,7 @@ TL.safety = (function(){
 </script>
 </body>
 </html>
+
 
 
 
